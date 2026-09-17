@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en" data-style="modern" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DropTrace · drop monitor</title>
+<meta name="description" content="Continuous connectivity monitoring that records every drop as evidence.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/theme-modern.css">
+<script src="/static/theme.js"></script>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M2 18h5l3-9 4 16 4-13 3 6h9" fill="none" stroke="url(#g)" stroke-width="2.4"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <defs><linearGradient id="g" x1="0" y1="0" x2="32" y2="0">
+        <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#a78bfa"/>
+      </linearGradient></defs>
+    </svg>
+    <div>
+      <h1>DropTrace</h1>
+      <p class="tagline" id="target-line">loading…</p>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <div class="state-pill" id="state-pill" data-state="idle">
+      <span class="pulse"></span><span id="state-text">connecting…</span>
+    </div>
+    <div class="countdown">
+      <span class="countdown-label">elapsed</span>
+      <strong id="elapsed-text">—</strong>
+      <span class="countdown-label" id="remaining-label"></span>
+    </div>
+  </div>
+</header>
+
+<div class="outage-banner" id="outage-banner" hidden>
+  <span class="ob-icon" aria-hidden="true">⚠</span>
+  <div class="ob-text">
+    <strong id="ob-title">Connectivity lost</strong>
+    <span class="ob-sub" id="ob-sub">—</span>
+  </div>
+  <div class="ob-timer"><span id="ob-timer">0s</span><small>so far</small></div>
+</div>
+
+<section class="toolbar">
+  <div class="control-group">
+    <button class="btn primary" id="btn-toggle" type="button">Pause</button>
+    <button class="btn" id="btn-ping" type="button" title="Run one probe round right now">Probe now</button>
+    <button class="btn" id="btn-speed" type="button" title="Run a throughput test right now">Speed test</button>
+  </div>
+  <div class="control-group range" id="range-group" role="group" aria-label="Time range">
+    <button class="chip" data-window="5m" type="button">5m</button>
+    <button class="chip" data-window="15m" type="button">15m</button>
+    <button class="chip is-active" data-window="1h" type="button">1h</button>
+    <button class="chip" data-window="6h" type="button">6h</button>
+    <button class="chip" data-window="24h" type="button">24h</button>
+    <button class="chip" data-window="all" type="button">all</button>
+  </div>
+  <div class="control-group">
+    <a class="btn ghost" id="btn-csv-incidents" href="/api/incidents.csv?window=all"
+       title="Every recorded outage — the evidence">Outages CSV</a>
+    <a class="btn ghost" id="btn-csv" href="/api/export.csv?window=all"
+       title="Every raw probe">Samples CSV</a>
+    <button class="btn ghost small" id="btn-awake" type="button"
+            title="Ask the browser to keep this display on while you watch">Keep screen on</button>
+    <span class="awake-status" id="awake-status" hidden></span>
+    <div class="control-group" id="theme-chips" role="group" aria-label="Style"></div>
+    <a class="btn ghost" href="/stats" title="Consolidated statistics: per day, per target, drops by size and hour">Statistics</a>
+    <button class="btn ghost danger" id="btn-reset" type="button">Reset</button>
+  </div>
+</section>
+
+<main>
+  <section class="cards">
+    <article class="card accent-green" id="card-uptime">
+      <header><h3>Uptime</h3><span class="badge" id="uptime-badge">—</span></header>
+      <div class="value"><span id="v-uptime">—</span><small>%</small></div>
+      <p class="meta" id="m-uptime">waiting for the first round…</p>
+    </article>
+
+    <article class="card accent-rose" id="card-outages">
+      <header><h3>Outages</h3><span class="badge" id="outage-badge">in range</span></header>
+      <div class="value"><span id="v-outages">—</span><small>drops</small></div>
+      <p class="meta" id="m-outages">—</p>
+    </article>
+
+    <article class="card accent-cyan" id="card-ping">
+      <header><h3>Ping</h3><span class="badge" id="ping-badge">internet</span></header>
+      <div class="value"><span id="v-ping">—</span><small>ms</small></div>
+      <p class="meta" id="m-ping">—</p>
+    </article>
+
+    <article class="card accent-violet" id="card-jitter">
+      <header><h3>Jitter</h3><span class="badge">variation</span></header>
+      <div class="value"><span id="v-jitter">—</span><small>ms</small></div>
+      <p class="meta" id="m-jitter">—</p>
+    </article>
+
+    <article class="card accent-blue" id="card-down">
+      <header><h3>Download</h3><span class="badge" id="down-badge">last test</span></header>
+      <div class="value"><span id="v-down">—</span><small>Mbps</small></div>
+      <p class="meta" id="m-down">—</p>
+    </article>
+
+    <article class="card accent-amber" id="card-up">
+      <header><h3>Upload</h3><span class="badge" id="up-badge">last test</span></header>
+      <div class="value"><span id="v-up">—</span><small>Mbps</small></div>
+      <p class="meta" id="m-up">—</p>
+    </article>
+  </section>
+
+  <section class="panel facts-strip">
+    <dl class="facts spread">
+      <div><dt>Rounds</dt><dd id="f-rounds">0</dd></div>
+      <div><dt>Next probe</dt><dd id="f-next-ping">—</dd></div>
+      <div><dt>Next burst test</dt><dd id="f-next-quick">—</dd></div>
+      <div><dt>Next sustained test</dt><dd id="f-next-sustained">—</dd></div>
+      <div><dt>Data used</dt><dd id="f-data">—</dd></div>
+      <div><dt>Stored samples</dt><dd id="f-stored">0</dd></div>
+      <div><dt>Speed test throttling</dt><dd id="f-throttled">no</dd></div>
+      <div><dt title="Auto-detected targets that never answer are listed in the Targets table instead">Last error</dt><dd id="f-last-error" class="wrap">none</dd></div>
+    </dl>
+  </section>
+
+  <section class="panel">
+    <header class="panel-head">
+      <h2>Connection timeline</h2>
+      <div class="panel-note" id="strip-note">each block is one probe round · red = no internet</div>
+    </header>
+    <div class="strip-host" id="strip-host">
+      <div class="strip" id="strip" role="img"
+           aria-label="Per-round connectivity timeline — drag to zoom into a period"></div>
+      <div class="strip-selection" id="strip-selection" hidden></div>
+    </div>
+    <div class="strip-legend">
+      <span><i class="swatch up"></i> reachable</span>
+      <span><i class="swatch down"></i> outage</span>
+      <span class="dim">drag across the timeline to zoom into a period</span>
+      <span class="dim" id="strip-range">—</span>
+      <button class="btn ghost small" id="btn-clear-range" type="button" hidden>Clear selection ✕</button>
+    </div>
+  </section>
+
+  <section class="grid-charts">
+    <article class="panel span-2">
+      <header class="panel-head">
+        <h2>Latency per target</h2>
+        <div class="panel-note" id="note-latency">ms · gaps mean no answer</div>
+      </header>
+      <div class="canvas-wrap tall"><canvas id="chart-latency"></canvas></div>
+    </article>
+
+    <article class="panel">
+      <header class="panel-head">
+        <h2>Throughput</h2>
+        <div class="panel-note" id="note-throughput">Mbps</div>
+      </header>
+      <div class="canvas-wrap tall"><canvas id="chart-throughput"></canvas></div>
+    </article>
+
+    <article class="panel span-2">
+      <header class="panel-head">
+        <h2>Last speed test, second by second</h2>
+        <div class="panel-note" id="note-lasttest">
+          per-second rate inside one test — a falling tail means your link throttles
+        </div>
+      </header>
+      <div class="canvas-wrap tall"><canvas id="chart-lasttest"></canvas></div>
+      <p class="meta dim" id="lasttest-summary">no speed test yet</p>
+    </article>
+
+    <article class="panel">
+      <header class="panel-head">
+        <h2>Speed tests</h2>
+        <div class="panel-note" id="note-speedtests">every run, whatever started it</div>
+      </header>
+      <div class="table-wrap tall">
+        <table class="data">
+          <thead>
+            <tr><th>Time</th><th>Kind</th><th class="num">Down</th>
+                <th class="num">Up</th><th class="num">Moved</th></tr>
+          </thead>
+          <tbody id="speedtests-body">
+            <tr><td colspan="5" class="empty">No speed tests yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="meta dim">
+        <span class="pill dns">10m</span> burst ·
+        <span class="pill">1h</span> sustained ·
+        <span class="pill local">manual</span> asked for by hand
+      </p>
+    </article>
+  </section>
+
+  <section class="grid-bottom">
+    <article class="panel span-2">
+      <header class="panel-head">
+        <h2>Recorded outages</h2>
+        <div class="panel-note" id="note-incidents">the evidence — one row per drop</div>
+      </header>
+      <div class="table-wrap tall">
+        <table class="data" id="incidents-table">
+          <thead>
+            <tr><th>Started</th><th>Ended</th><th class="num">Duration</th><th class="num">±</th>
+                <th>What failed</th><th>Verdict</th><th class="num">Rounds</th></tr>
+          </thead>
+          <tbody id="incidents-body">
+            <tr><td colspan="7" class="empty">No outages recorded in this range.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="panel">
+      <header class="panel-head"><h2>Targets</h2><div class="panel-note" id="targets-note">live</div></header>
+      <div class="table-wrap">
+        <table class="data" id="targets-table">
+          <thead>
+            <tr><th>Target</th><th>Role</th><th class="num">Now</th><th class="num">Avg</th><th class="num">OK</th></tr>
+          </thead>
+          <tbody id="targets-body">
+            <tr><td colspan="5" class="empty">—</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="settings">
+        <details class="advanced">
+          <summary>Cadence</summary>
+        <label>Probe every
+          <span><input id="in-latency" type="number" min="0.2" step="0.5" value="5"> s</span>
+        </label>
+        <label>Burst test every
+          <span><input id="in-quick" type="number" min="0" step="60" value="600"> s <em class="dim">(small, cheap)</em></span>
+        </label>
+        <label>Sustained test every
+          <span><input id="in-sustained" type="number" min="0" step="300" value="3600"> s <em class="dim">(long, costly)</em></span>
+        </label>
+        <label>Run for
+          <span><input id="in-duration" type="number" min="0" step="60" value="0"> s <em class="dim">(0 = forever)</em></span>
+        </label>
+        <label>…each direction for
+          <span><input id="in-down-seconds" type="number" min="0" max="600" step="1" value="10"> s down /
+                 <input id="in-up-seconds" type="number" min="0" max="600" step="1" value="10"> s up</span>
+        </label>
+        <p class="meta dim" id="data-projection">—</p>
+        </details>
+
+        <details class="advanced">
+          <summary>Targets &amp; advanced</summary>
+
+          <label class="stacked">Internet targets
+            <input id="in-targets" type="text" spellcheck="false" placeholder="1.1.1.1:443,8.8.8.8:443">
+          </label>
+          <label class="stacked">Extra targets
+            <input id="in-extra" type="text" spellcheck="false" placeholder="router=192.168.1.1:80">
+          </label>
+          <label class="stacked">Corroboration hosts
+            <input id="in-factcheck" type="text" spellcheck="false" placeholder="github.com:443,wikipedia.org:443">
+          </label>
+          <label>Baseline check every
+            <span><input id="in-factcheck-int" type="number" min="0" max="86400" step="60" value="900"> s</span>
+          </label>
+          <p class="meta dim">
+            Hosts on other networks, probed when a drop is suspected so the record
+            shows several networks were dark at once — and on the baseline timer so
+            a host your ISP blocks cannot masquerade as a witness. They also count
+            towards the verdict, so five healthy networks cancel a false alarm.
+          </p>
+          <label class="stacked">DNS probe name
+            <input id="in-dnsname" type="text" spellcheck="false" placeholder="one.one.one.one">
+          </label>
+
+          <label class="check"><input id="in-gateway" type="checkbox"> Probe default gateway</label>
+          <label class="check"><input id="in-resolver" type="checkbox"> Probe DNS resolver</label>
+
+          <label>Parallel streams
+            <input id="in-streams" type="number" min="1" max="16" value="1">
+          </label>
+          <label class="stacked">Stop a direction after
+            <input id="in-maxbytes" type="number" min="0" step="50" value="0">
+          </label>
+          <p class="meta dim">MiB, 0 = no cap. A guard for very fast links or a data cap.</p>
+          <label>Download request size
+            <span><input id="in-down-chunk" type="number" min="1" max="512" step="1" value="64"> MiB</span>
+          </label>
+          <p class="meta dim">The endpoint rejects values above ~100 MB. Small requests cost a round trip each and under-report the rate.</p>
+          <label>Upload block size
+            <span><input id="in-up-chunk" type="number" min="0.1" max="64" step="0.5" value="1"> MiB</span>
+          </label>
+          <label>Connect timeout
+            <span><input id="in-timeout" type="number" min="0.2" max="30" step="0.1" value="1"> s</span>
+          </label>
+          <label>Rounds before an outage
+            <input id="in-minrounds" type="number" min="1" max="100" value="1">
+          </label>
+          <label>Keep individual probes for
+            <span><input id="in-rawwindow" type="number" min="0" max="365" step="1" value="7"> days</span>
+          </label>
+          <p class="meta dim">
+            Older probes are folded into hourly statistics (one row per target per
+            hour, a few megabytes a year) and every failure is kept verbatim, so a
+            drop stays provable. 0 keeps every probe for the whole retention window.
+          </p>
+          <label>Probe every … while down
+            <span><input id="in-fast" type="number" min="0" max="60" step="0.5" value="1"> s</span>
+          </label>
+          <label>…with a connect timeout of
+            <span><input id="in-fasttimeout" type="number" min="0.1" max="30" step="0.1" value="0.5"> s</span>
+          </label>
+          <label>…until this long recovered
+            <span><input id="in-fasthold" type="number" min="0" max="600" step="1" value="10"> s</span>
+          </label>
+          <label>…but never more than
+            <span><input id="in-fastmax" type="number" min="0" max="86400" step="10" value="300"> s</span>
+          </label>
+          <p class="meta dim">
+            A drop is caught at the normal cadence above, then resolved at this
+            faster one so its start and end are timed to the second.
+          </p>
+          <p class="meta dim">
+            An outage is a round where no internet target answered. Raising the
+            round count ignores blips shorter than that many probes.
+          </p>
+
+          <h4 class="sub-head">Remote vantage points</h4>
+          <p class="meta dim">
+            Open the link below on a phone or another machine to measure the same
+            network from there. Measurements are posted here and stored in this
+            database — nothing is kept on the other device.
+          </p>
+          <div class="device-form">
+            <input id="in-device" type="text" spellcheck="false" placeholder="s24-phone"
+                   aria-label="device label">
+            <button class="btn small" id="btn-add-device" type="button">Add device</button>
+          </div>
+          <div id="agent-links" class="agent-links">loading…</div>
+        </details>
+
+        <button class="btn primary small" id="btn-apply" type="button">Apply live</button>
+        <p class="meta dim" id="apply-note"></p>
+      </div>
+
+    </article>
+  </section>
+</main>
+
+<div class="speed-modal" id="speed-modal" hidden>
+  <div class="speed-card" role="dialog" aria-modal="true" aria-labelledby="speed-modal-title">
+    <header>
+      <h2 id="speed-modal-title">Measuring throughput</h2>
+      <button class="btn ghost small" id="speed-modal-hide" type="button">Hide</button>
+    </header>
+    <p class="speed-sub" id="speed-modal-sub">starting…</p>
+
+    <div class="speed-phase" id="speed-phase-download">
+      <div class="speed-phase-head">
+        <span>Download</span><strong id="speed-down-rate">—</strong>
+      </div>
+      <div class="bar"><i id="speed-down-bar"></i></div>
+      <div class="speed-ticks" id="speed-down-ticks"></div>
+    </div>
+
+    <div class="speed-phase" id="speed-phase-upload">
+      <div class="speed-phase-head">
+        <span>Upload</span><strong id="speed-up-rate">—</strong>
+      </div>
+      <div class="bar"><i id="speed-up-bar"></i></div>
+      <div class="speed-ticks" id="speed-up-ticks"></div>
+    </div>
+
+    <p class="meta dim" id="speed-modal-note"></p>
+  </div>
+</div>
+
+<footer>
+  <p>
+    <strong>How this measures:</strong> a probe is a TCP handshake, not ICMP
+    (raw sockets need privileges). Each round probes every target at once and
+    writes one sample per target, tagged with a role — <em>local</em> (resolver,
+    gateway), <em>internet</em> (public IPs) and <em>dns</em>. If only the
+    internet targets fail while the local ones answer, the verdict is “ISP or
+    upstream”; if the local ones fail too, it is “local network”. An outage row
+    opens on the first failed round and closes when a round succeeds.
+  </p>
+  <p class="dim">
+    Interval <span id="foot-latency">5</span>s · burst test every
+    <span id="foot-quick">600</span>s · sustained test every
+    <span id="foot-sustained">3600</span>s · <span id="foot-payload">—</span> ·
+    <span id="foot-conn">connecting…</span>
+  </p>
+</footer>
+
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/keepawake.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

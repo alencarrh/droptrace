@@ -1,0 +1,367 @@
+/* The modern style, in two modes.
+ *
+ * One family, one geometry: rounded surfaces with soft shadows, sentence-case
+ * labels with a colour dot, tinted tags, a segmented switch, no zebra striping.
+ * Only the palette changes between light and dark, and every colour that has to
+ * change is a custom property defined once per mode below -- so the two modes
+ * cannot drift apart, and a third one would be another token block.
+ *
+ * `data-style` marks the family and `data-theme` the mode, both set by theme.js
+ * before the first paint. Every selector here hangs off data-style, which a
+ * test enforces: nothing in this file can reach the base sheet or a future
+ * style.
+ */
+
+/* ------------------------------------------------------------------ tokens */
+html[data-style="modern"][data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f7f8fb;
+  --bg-2: #eef1f8;
+  --panel: #ffffff;
+  --panel-solid: #ffffff;
+  --border: #e8eaf1;
+  --border-strong: #d3d8e4;
+  --text: #0f172a;
+  --muted: #4b5563;
+  --dim: #8a93a6;
+  --cyan: #0891b2;
+  --green: #10b981;
+  --violet: #8b5cf6;
+  --rose: #f43f5e;
+  --amber: #f59e0b;
+  --blue: #4f46e5;
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px -18px rgba(15, 23, 42, 0.22);
+  --mesh:
+    radial-gradient(46rem 24rem at 6% -12%, rgba(79, 70, 229, 0.1), transparent 62%),
+    radial-gradient(40rem 22rem at 96% -8%, rgba(14, 165, 233, 0.1), transparent 62%),
+    radial-gradient(38rem 20rem at 55% 108%, rgba(16, 185, 129, 0.08), transparent 62%),
+    linear-gradient(180deg, #fbfcfe, #f7f8fb 58%);
+  --seg-track: #eef1f7;
+  --seg-active: #ffffff;
+  --seg-ink: #4b5563;
+  --tag-bg: #f1f5f9;
+  --tag-ink: #4b5563;
+  --tag-ok-bg: #e6f8f1;    --tag-ok-ink: #0b7a53;
+  --tag-bad-bg: #feecef;   --tag-bad-ink: #be123c;
+  --tag-warn-bg: #fef4e2;  --tag-warn-ink: #a16207;
+  --tag-alt-bg: #f1ecfe;   --tag-alt-ink: #6d28d9;
+  --tag-info-bg: #e6f6fd;  --tag-info-ink: #0369a1;
+  --row-line: #f1f3f8;
+  --row-hover: #f8fafc;
+  --row-bad: #fff5f7;
+  --row-ongoing: #ffe9ee;
+  --strip-track: #f1f3f8;
+  --strip-up: #34d399;
+  --strip-up-strong: #10b981;
+  --bar-track: #eef1f7;
+  --bar-from: #38bdf8;     --bar-to: #0891b2;
+  --bar-hot-from: #fb7185; --bar-hot-to: #e11d48;
+  --hatch: rgba(15, 23, 42, 0.1);
+  --hatch-ink: rgba(15, 23, 42, 0.16);
+  --code-bg: #f4f6fa;
+  --banner-bg: #fff0f3;
+  --banner-ink: #be123c;
+  --on-ink: #0b7a53;
+  --on-border: #9fe0c6;
+  --field-focus: #4f46e5;
+  --chart-c1: #0891b2;
+  --chart-c2: #10b981;
+  --chart-c3: #8b5cf6;
+  --chart-c4: #f59e0b;
+  --chart-c5: #4f46e5;
+  --chart-c6: #f43f5e;
+  --chart-c7: #d946ef;
+  --chart-c8: #14b8a6;
+  --chart-grid: rgba(15, 23, 42, 0.06);
+  --chart-axis: rgba(15, 23, 42, 0.1);
+  --chart-tick: #8a93a6;
+  --chart-label: #4b5563;
+  --chart-tip-bg: #0f172a;
+  --chart-tip-border: rgba(15, 23, 42, 0.1);
+  --chart-tip-title: #f8fafc;
+  --chart-tip-body: #cbd5e1;
+  --chart-outage-fill: rgba(244, 63, 94, 0.1);
+  --chart-outage-stroke: rgba(244, 63, 94, 0.26);
+  --danger-ink: #e11d48;
+}
+
+html[data-style="modern"][data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0b1020;
+  --bg-2: #0e1426;
+  --panel: #151b2e;
+  --panel-solid: #151b2e;
+  --border: #232a40;
+  --border-strong: #333c56;
+  --text: #e8ecf6;
+  --muted: #a3adc2;
+  --dim: #7c88a3;
+  --cyan: #22d3ee;
+  --green: #34d399;
+  --violet: #a78bfa;
+  --rose: #fb7185;
+  --amber: #fbbf24;
+  --blue: #818cf8;
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.45), 0 20px 44px -26px rgba(0, 0, 0, 0.85);
+  --mesh:
+    radial-gradient(46rem 24rem at 6% -12%, rgba(99, 102, 241, 0.22), transparent 62%),
+    radial-gradient(40rem 22rem at 96% -8%, rgba(34, 211, 238, 0.16), transparent 62%),
+    radial-gradient(38rem 20rem at 55% 108%, rgba(16, 185, 129, 0.12), transparent 62%),
+    linear-gradient(180deg, #0e1426, #0b1020 58%);
+  --seg-track: #1b2236;
+  --seg-active: #2c3550;
+  --seg-ink: #a3adc2;
+  --tag-bg: #232a40;
+  --tag-ink: #a3adc2;
+  --tag-ok-bg: rgba(52, 211, 153, 0.14);   --tag-ok-ink: #6ee7b7;
+  --tag-bad-bg: rgba(251, 113, 133, 0.16); --tag-bad-ink: #fda4af;
+  --tag-warn-bg: rgba(251, 191, 36, 0.14); --tag-warn-ink: #fcd34d;
+  --tag-alt-bg: rgba(167, 139, 250, 0.16); --tag-alt-ink: #c4b5fd;
+  --tag-info-bg: rgba(34, 211, 238, 0.14); --tag-info-ink: #67e8f9;
+  --row-line: #1e253a;
+  --row-hover: #1b2236;
+  --row-bad: rgba(251, 113, 133, 0.1);
+  --row-ongoing: rgba(251, 113, 133, 0.18);
+  --strip-track: #101728;
+  --strip-up: #34d399;
+  --strip-up-strong: #10b981;
+  --bar-track: #1e253a;
+  --bar-from: #22d3ee;     --bar-to: #0e7490;
+  --bar-hot-from: #fb7185; --bar-hot-to: #9f1239;
+  --hatch: rgba(148, 163, 184, 0.16);
+  --hatch-ink: rgba(148, 163, 184, 0.3);
+  --code-bg: #0e1426;
+  --banner-bg: rgba(244, 63, 94, 0.14);
+  --banner-ink: #fda4af;
+  --on-ink: #6ee7b7;
+  --on-border: rgba(52, 211, 153, 0.5);
+  --field-focus: #818cf8;
+  --chart-c1: #22d3ee;
+  --chart-c2: #34d399;
+  --chart-c3: #a78bfa;
+  --chart-c4: #fbbf24;
+  --chart-c5: #818cf8;
+  --chart-c6: #fb7185;
+  --chart-c7: #f472b6;
+  --chart-c8: #4ade80;
+  --chart-grid: rgba(148, 163, 184, 0.1);
+  --chart-axis: rgba(148, 163, 184, 0.18);
+  --chart-tick: #7c88a3;
+  --chart-label: #a3adc2;
+  --chart-tip-bg: #0b1020;
+  --chart-tip-border: rgba(148, 163, 184, 0.25);
+  --chart-tip-title: #e8ecf6;
+  --chart-tip-body: #cbd5e1;
+  --chart-outage-fill: rgba(251, 113, 133, 0.16);
+  --chart-outage-stroke: rgba(251, 113, 133, 0.34);
+  --danger-ink: #fb7185;
+}
+
+/* ------------------------------------------------------------------ chrome */
+html[data-style="modern"] body { background: var(--bg); color: var(--text); }
+html[data-style="modern"] .aurora { background: var(--mesh); }
+html[data-style="modern"] .brand-mark { filter: none; }
+html[data-style="modern"] .brand h1 {
+  background: none; -webkit-text-fill-color: currentColor; color: var(--text);
+  font-size: 1.4rem; font-weight: 700; letter-spacing: -0.025em;
+}
+html[data-style="modern"] .tagline { color: var(--dim); }
+html[data-style="modern"] .dim { color: var(--dim); }
+
+/* ---------------------------------------------------------------- surfaces */
+html[data-style="modern"] .panel,
+html[data-style="modern"] .card,
+html[data-style="modern"] .speed-card {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--panel); backdrop-filter: none; box-shadow: var(--shadow);
+}
+html[data-style="modern"] .panel { padding: 1rem 1.15rem 1.1rem; }
+html[data-style="modern"] .panel-head {
+  border: 0; padding-bottom: 0; margin-bottom: 0.55rem;
+}
+html[data-style="modern"] .panel h2 { font-size: 0.98rem; font-weight: 650; letter-spacing: -0.015em; }
+html[data-style="modern"] .panel-note { font-size: 0.72rem; color: var(--dim); }
+
+/* Cards: a colour dot next to a sentence-case label. */
+html[data-style="modern"] .card {
+  border-top: 1px solid var(--border); padding: 1rem 1.15rem 1.05rem;
+}
+html[data-style="modern"] .card::before,
+html[data-style="modern"] .card::after { display: none; }
+html[data-style="modern"] .card h3 {
+  text-transform: none; letter-spacing: -0.01em; font-size: 0.82rem;
+  font-weight: 600; color: var(--muted); display: inline-flex; align-items: center;
+}
+html[data-style="modern"] .card h3::before {
+  content: ""; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent); margin-right: 0.45rem;
+}
+html[data-style="modern"] .card .value span { font-size: 2.05rem; font-weight: 700; letter-spacing: -0.035em; }
+html[data-style="modern"] .card .meta { color: var(--dim); }
+html[data-style="modern"] .badge {
+  border: 0; border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink);
+  padding: 0.16rem 0.55rem; font-weight: 600;
+}
+html[data-style="modern"] .card.is-alarm { border-color: color-mix(in srgb, var(--rose) 45%, var(--border)); }
+html[data-style="modern"] .card.is-live {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+/* ------------------------------------------------------- controls and tags */
+html[data-style="modern"] .btn {
+  border-radius: 10px; border-color: var(--border-strong); background: var(--panel);
+  color: var(--text); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); transform: none;
+}
+html[data-style="modern"] .btn:hover { border-color: var(--text); transform: none; }
+html[data-style="modern"] .btn.primary {
+  background: var(--blue); border-color: var(--blue);
+  color: color-mix(in srgb, var(--blue) 12%, #ffffff);
+  box-shadow: 0 8px 20px -12px color-mix(in srgb, var(--blue) 80%, transparent);
+}
+html[data-style="modern"] .btn.ghost { background: transparent; color: var(--muted); }
+html[data-style="modern"] .control-group.range,
+html[data-style="modern"] #theme-chips {
+  background: var(--seg-track); border: 0; border-radius: 999px; padding: 3px;
+  gap: 2px; flex-wrap: nowrap;
+}
+/* A chip is one label: "7 days" must not break in half when the toolbar gets
+   tight, the group moves to the next line instead. */
+html[data-style="modern"] .chip {
+  border: 0; border-radius: 999px; background: transparent; color: var(--seg-ink);
+  padding: 0.28rem 0.62rem; font-weight: 550; white-space: nowrap; flex: 0 0 auto;
+}
+html[data-style="modern"] .chip:hover { color: var(--text); }
+html[data-style="modern"] .chip.is-active {
+  background: var(--seg-active); color: var(--text); font-weight: 650;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+html[data-style="modern"] .summary-toggle { color: var(--muted); }
+html[data-style="modern"] .summary-toggle input,
+html[data-style="modern"] .settings input[type="checkbox"] { accent-color: var(--blue); }
+
+html[data-style="modern"] .pill {
+  border: 0; border-radius: 999px; background: var(--tag-bg); color: var(--tag-ink);
+  padding: 0.16rem 0.5rem; font-weight: 600; letter-spacing: 0.005em;
+}
+html[data-style="modern"] .pill.ok { background: var(--tag-ok-bg); color: var(--tag-ok-ink); }
+html[data-style="modern"] .pill.bad { background: var(--tag-bad-bg); color: var(--tag-bad-ink); }
+html[data-style="modern"] .pill.local { background: var(--tag-warn-bg); color: var(--tag-warn-ink); }
+html[data-style="modern"] .pill.isp { background: var(--tag-bad-bg); color: var(--tag-bad-ink); }
+html[data-style="modern"] .pill.net { background: var(--tag-alt-bg); color: var(--tag-alt-ink); }
+html[data-style="modern"] .pill.dns { background: var(--tag-info-bg); color: var(--tag-info-ink); }
+html[data-style="modern"] .state-pill {
+  border: 0; border-radius: 999px; background: var(--panel); color: var(--muted);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+html[data-style="modern"] .state-pill[data-state="running"] { color: var(--on-ink); }
+html[data-style="modern"] .state-pill[data-state="paused"] { color: var(--tag-warn-ink); }
+html[data-style="modern"] .state-pill[data-state="finished"] { color: var(--tag-alt-ink); }
+html[data-style="modern"] .state-pill[data-state="down"] { color: var(--tag-bad-ink); }
+html[data-style="modern"] .countdown-label { color: var(--dim); }
+html[data-style="modern"] .outage-banner {
+  border: 0; border-radius: var(--radius); background: var(--banner-bg); box-shadow: none;
+}
+html[data-style="modern"] .ob-icon { filter: none; }
+html[data-style="modern"] .ob-sub,
+html[data-style="modern"] .ob-timer small { color: var(--banner-ink); }
+
+html[data-style="modern"] .topbar-right { flex-wrap: wrap; justify-content: flex-end; }
+html[data-style="modern"] .summary-toggle,
+html[data-style="modern"] .toolbar .btn,
+html[data-style="modern"] #btn-awake { white-space: nowrap; }
+
+/* ----------------------------------------------------------------- tables */
+html[data-style="modern"] table.data th {
+  background: transparent; color: var(--dim); border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+html[data-style="modern"] table.data td { border-bottom: 1px solid var(--row-line); }
+html[data-style="modern"] table.data tbody tr:hover td { background: var(--row-hover); }
+html[data-style="modern"] table.data tr.row-bad td,
+html[data-style="modern"] table.data tr.row-down td,
+html[data-style="modern"] .row-bad td { background: var(--row-bad); }
+html[data-style="modern"] table.data tr.row-ongoing td { background: var(--row-ongoing); }
+
+/* --------------------------------------------- timeline, bars and coverage */
+html[data-style="modern"] .strip {
+  background: var(--strip-track); border: 0; border-radius: 10px; padding: 4px; gap: 1px;
+}
+html[data-style="modern"] .strip .tick { background: var(--strip-up); border-radius: 2px; }
+html[data-style="modern"] .strip .tick.up-high { background: var(--strip-up-strong); }
+html[data-style="modern"] .strip .tick.up-slow { background: var(--amber); }
+html[data-style="modern"] .strip .tick.down { background: var(--rose); box-shadow: none; }
+html[data-style="modern"] .strip .tick:hover { outline: 1px solid var(--text); }
+html[data-style="modern"] .strip-selection {
+  background: color-mix(in srgb, var(--blue) 16%, transparent);
+  border-color: var(--blue); border-radius: 4px;
+}
+html[data-style="modern"] .strip-legend .swatch { border-radius: 3px; }
+html[data-style="modern"] .strip-legend .swatch.up { background: var(--strip-up); }
+html[data-style="modern"] .strip-legend .swatch.down { background: var(--rose); }
+html[data-style="modern"] .strip-legend .swatch.slow { background: var(--amber); }
+html[data-style="modern"] .strip-legend .swatch.hot { background: var(--rose); }
+html[data-style="modern"] .strip-legend .swatch.off {
+  background: repeating-linear-gradient(45deg, var(--hatch) 0 2px, transparent 2px 5px);
+  border: 1px solid var(--hatch-ink);
+}
+html[data-style="modern"] .bars .bar {
+  background: linear-gradient(180deg, var(--bar-from), var(--bar-to));
+  border-radius: 4px 4px 1px 1px;
+}
+html[data-style="modern"] .bars .bar.hot {
+  background: linear-gradient(180deg, var(--bar-hot-from), var(--bar-hot-to));
+}
+/* Online with nothing lost: a short tick, so "was it even there" reads at a
+   glance without a bar that looks like a small failure. */
+html[data-style="modern"] .bars .bar.up { height: 5px; background: var(--strip-up); }
+/* Not reporting: a full-height hatched column, the usual "no data" idiom. */
+html[data-style="modern"] .bars .bar.off {
+  height: 100%; border-radius: 3px;
+  background: repeating-linear-gradient(45deg, var(--hatch) 0 3px, transparent 3px 6px);
+  outline: 1px solid var(--hatch-ink); outline-offset: -1px;
+}
+html[data-style="modern"] .bar { border-radius: 999px; background: var(--bar-track); }
+html[data-style="modern"] .bar > i { border-radius: 999px; }
+html[data-style="modern"] .day-cell { border-radius: 4px; }
+html[data-style="modern"] .bar-axis span { color: var(--dim); }
+html[data-style="modern"] .device-name {
+  flex-basis: 8.6rem; display: flex; gap: 0.3rem; justify-content: space-between;
+}
+html[data-style="modern"] .device-legend { margin: 0.1rem 0 0.4rem; gap: 0.85rem; }
+
+/* ------------------------------------------------------------------- misc */
+html[data-style="modern"] .facts > div { border-bottom: 1px solid var(--row-line); }
+html[data-style="modern"] .settings input {
+  background: var(--panel); border-radius: 9px; border-color: var(--border-strong);
+  color: var(--text);
+}
+html[data-style="modern"] .settings input:focus { border-color: var(--field-focus); }
+html[data-style="modern"] .speed-modal {
+  background: rgba(11, 16, 32, 0.45); backdrop-filter: blur(6px);
+}
+html[data-style="modern"] .speed-card { border-radius: 18px; }
+html[data-style="modern"] #speed-phase-download .bar > i {
+  background: linear-gradient(90deg, var(--chart-c2), var(--green));
+}
+html[data-style="modern"] #speed-phase-upload .bar > i {
+  background: linear-gradient(90deg, var(--chart-c3), var(--violet));
+}
+html[data-style="modern"] .speed-ticks span {
+  background: color-mix(in srgb, var(--green) 80%, transparent); border-radius: 3px 3px 0 0;
+}
+html[data-style="modern"] #speed-phase-upload .speed-ticks span {
+  background: color-mix(in srgb, var(--violet) 80%, transparent);
+}
+html[data-style="modern"] .agent-url code {
+  background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px;
+  color: var(--text);
+}
+html[data-style="modern"] .btn.is-on { color: var(--on-ink); border-color: var(--on-border); }
+html[data-style="modern"] .awake-status { color: var(--dim); }
+html[data-style="modern"] .footer { color: var(--dim); border-top-color: var(--border); }
+html[data-style="modern"] .settings #data-projection.warn { color: var(--amber); }
+html[data-style="modern"] .settings #data-projection.alarm { color: var(--rose); }

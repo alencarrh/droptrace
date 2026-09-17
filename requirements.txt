@@ -1,0 +1,9 @@
+# Runtime dependencies. All of these are pure-python wheels; no compiler needed.
+fastapi>=0.115
+uvicorn>=0.30
+httpx>=0.27
+aiosqlite>=0.20
+
+# Development / tests
+pytest>=8.0
+pytest-asyncio>=0.23

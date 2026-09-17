@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en" data-style="modern" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DropTrace · statistics</title>
+<meta name="description" content="Consolidated connectivity statistics: uptime, incidents, loss and latency per day and per target.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/theme-modern.css">
+<script src="/static/theme.js"></script>
+</head>
+<body class="stats-page">
+<div class="aurora" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M2 18h5l3-9 4 16 4-13 3 6h9" fill="none" stroke="url(#g2)" stroke-width="2.4"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <defs><linearGradient id="g2" x1="0" y1="0" x2="32" y2="0">
+        <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#a78bfa"/>
+      </linearGradient></defs>
+    </svg>
+    <div>
+      <h1>DropTrace · statistics</h1>
+      <p class="tagline" id="stats-window">loading…</p>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <div class="control-group" id="stats-range"></div>
+    <div class="control-group refresh-group" id="stats-refresh" role="group"
+         aria-label="Refresh automatically">
+      <span class="countdown-label">auto</span>
+    </div>
+    <label class="summary-toggle">
+      <input type="checkbox" id="in-summary"> one-screen summary
+    </label>
+    <div class="control-group" id="theme-chips" role="group" aria-label="Style"></div>
+    <button class="btn ghost small" id="btn-awake" type="button"
+            title="Ask the browser to keep this display on while you watch">Keep screen on</button>
+    <span class="awake-status" id="awake-status" hidden></span>
+    <a class="btn ghost small" href="/">← live dashboard</a>
+  </div>
+</header>
+
+<main>
+<section class="cards" id="stat-cards"></section>
+
+<section class="grid-stats" id="stats-grid">
+
+  <article class="panel span-2" data-keep>
+    <header class="panel-head">
+      <h2>Per day</h2>
+      <div class="panel-note" id="daily-note">uptime, drops and probe health</div>
+    </header>
+    <div class="day-strip" id="day-strip"></div>
+    <div class="table-wrap">
+      <table class="data small">
+        <thead>
+          <tr>
+            <th>Day</th><th class="num">Uptime</th><th class="num">Rounds</th>
+            <th class="num">Down</th><th class="num">Drops</th><th class="num">Downtime</th>
+            <th class="num">Longest</th><th class="num">Probes</th><th class="num">Failed</th>
+            <th class="num">Fail%</th><th class="num">Loss%</th>
+            <th class="num">Avg ms</th><th class="num">Max ms</th>
+            <th class="num">Attribution</th>
+          </tr>
+        </thead>
+        <tbody id="daily-body"><tr><td colspan="14" class="empty">loading…</td></tr></tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="panel" data-keep>
+    <header class="panel-head">
+      <h2>Drops</h2>
+      <div class="panel-note" id="incident-note">size and time of day</div>
+    </header>
+    <div class="stat-block">
+      <div class="stat-line"><span>Drops</span><strong id="inc-count">—</strong></div>
+      <div class="stat-line"><span>Total downtime</span><strong id="inc-total">—</strong></div>
+      <div class="stat-line"><span>Longest</span><strong id="inc-longest">—</strong></div>
+      <div class="stat-line"><span>Mean</span><strong id="inc-mean">—</strong></div>
+    </div>
+    <p class="meta dim small-gap">How long they last</p>
+    <div class="bars" id="inc-histogram"></div>
+    <p class="meta dim small-gap">What time they start (0–23h)</p>
+    <div class="bars hours" id="inc-hours"></div>
+    <div class="stat-block" id="inc-scopes"></div>
+    <p class="meta dim small-gap" id="inc-error">—</p>
+  </article>
+
+  <article class="panel" data-keep>
+    <header class="panel-head">
+      <h2>Per target</h2>
+      <div class="panel-note">which endpoint is actually flaky</div>
+    </header>
+    <div class="table-wrap">
+      <table class="data small">
+        <thead>
+          <tr><th>Target</th><th>Role</th><th class="num">Probes</th><th class="num">Failed</th>
+              <th class="num">Fail%</th><th class="num">Loss%</th>
+              <th class="num">Worst hour</th><th class="num">Avg ms</th><th class="num">Max ms</th>
+              <th class="num">Jitter</th></tr>
+        </thead>
+        <tbody id="target-body"><tr><td colspan="10" class="empty">loading…</td></tr></tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="panel hide-in-summary">
+    <header class="panel-head">
+      <h2>What the failures said</h2>
+      <div class="panel-note">the error text, counted</div>
+    </header>
+    <div class="table-wrap">
+      <table class="data small">
+        <thead><tr><th>Error</th><th class="num">Count</th></tr></thead>
+        <tbody id="error-body"><tr><td colspan="2" class="empty">loading…</td></tr></tbody>
+      </table>
+    </div>
+    <p class="meta dim small-gap">Failures by target</p>
+    <div class="table-wrap">
+      <table class="data small">
+        <thead><tr><th>Target</th><th class="num">Failures</th></tr></thead>
+        <tbody id="failtarget-body"><tr><td colspan="2" class="empty">—</td></tr></tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="panel hide-in-summary" id="devices-panel">
+    <header class="panel-head">
+      <h2>Devices</h2>
+      <div class="panel-note" id="devices-note">on = reported within the last minute</div>
+    </header>
+    <div class="table-wrap">
+      <table class="data small">
+        <thead>
+          <tr><th>Device</th><th>Reported by</th><th class="num">Online</th>
+              <th class="num">Probes</th><th class="num">Failed</th>
+              <th class="num">Fail %</th><th class="num">First seen</th><th class="num">Last seen</th></tr>
+        </thead>
+        <tbody id="devices-body"><tr><td colspan="8" class="empty">only this machine so far</td></tr></tbody>
+      </table>
+    </div>
+    <p class="meta dim small-gap">Per hour, by device — read a row as "was this device
+      even there, and did it lose anything"</p>
+    <div class="strip-legend device-legend" id="device-legend">
+      <span><i class="swatch up"></i>online, nothing lost</span>
+      <span><i class="swatch hot"></i>online, probes failed</span>
+      <span><i class="swatch off"></i>not reporting</span>
+    </div>
+    <div id="device-hours"></div>
+  </article>
+
+  <article class="panel hide-in-summary">
+    <header class="panel-head">
+      <h2>Throughput</h2>
+      <div class="panel-note">burst (10m) and sustained (1h)</div>
+    </header>
+    <div class="table-wrap">
+      <table class="data small">
+        <thead>
+          <tr><th>Tier</th><th class="num">Runs</th><th class="num">Manual</th>
+              <th class="num">Down avg</th><th class="num">Down best</th><th class="num">Down worst</th>
+              <th class="num">Up avg</th><th class="num">Up best</th><th class="num">Up worst</th></tr>
+        </thead>
+        <tbody id="speed-body"><tr><td colspan="9" class="empty">loading…</td></tr></tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="panel hide-in-summary">
+    <header class="panel-head">
+      <h2>Coverage</h2>
+      <div class="panel-note">what is on disk, and at which resolution</div>
+    </header>
+    <dl class="facts" id="coverage"></dl>
+  </article>
+
+  <article class="panel span-2 hide-in-summary" id="loss-panel">
+    <header class="panel-head">
+      <h2>Handshake loss at the drop</h2>
+      <div class="panel-note" id="loss-note">counted, not inferred: a burst of handshakes fired when a round found nothing</div>
+    </header>
+    <div class="table-wrap">
+      <table class="data small">
+        <thead>
+          <tr><th>When</th><th>Target</th><th class="num">Sent</th><th class="num">Lost</th>
+              <th class="num">Loss %</th><th class="num">Min ms</th><th class="num">Avg ms</th>
+              <th class="num">Max ms</th><th>Result</th></tr>
+        </thead>
+        <tbody id="loss-body"><tr><td colspan="9" class="empty">no burst yet</td></tr></tbody>
+      </table>
+    </div>
+  </article>
+
+  <article class="panel span-2 hide-in-summary" id="path-panel">
+    <header class="panel-head">
+      <h2>Path at the drop</h2>
+      <div class="panel-note" id="path-note">where the traffic stopped, next to the same path when it worked</div>
+    </header>
+    <div class="table-wrap">
+      <table class="data small">
+        <thead>
+          <tr><th>Trace</th><th>When</th><th class="num">Hops</th><th class="num">Answered</th>
+              <th>Stopped at</th><th>Result</th></tr>
+        </thead>
+        <tbody id="path-body"><tr><td colspan="6" class="empty">no trace yet</td></tr></tbody>
+      </table>
+    </div>
+    <p class="meta dim small-gap" id="path-hops-note">hop by hop, at the drop</p>
+    <div class="table-wrap tall">
+      <table class="data small">
+        <thead>
+          <tr><th class="num">Hop</th><th>Address</th><th class="num">RTT ms</th><th>Note</th></tr>
+        </thead>
+        <tbody id="path-hops"><tr><td colspan="4" class="empty">—</td></tr></tbody>
+      </table>
+    </div>
+  </article>
+
+</section>
+</main>
+
+<footer class="footer">
+  <span>DropTrace statistics</span>
+  <span id="stats-updated">—</span>
+  <span id="stats-foot">—</span>
+</footer>
+
+<script src="/static/keepawake.js"></script>
+<script src="/static/stats.js"></script>
+</body>
+</html>

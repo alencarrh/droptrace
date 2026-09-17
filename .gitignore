@@ -1,0 +1,29 @@
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# app data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# runtime leftovers from the launchers
+droptrace.log
+droptrace.pid
+
+# scratch dir used for headless browser profiles during screenshotting
+tmp-ui/
+
+# editors / os
+.vscode/
+.idea/
+.DS_Store

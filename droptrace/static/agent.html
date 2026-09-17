@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en" data-style="modern" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DropTrace · this device as a vantage point</title>
+<meta name="description" content="Measure this device's connectivity and report it to DropTrace on the network. Nothing is stored on this device.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/styles.css">
+<link rel="stylesheet" href="/static/theme-modern.css">
+<script src="/static/theme.js"></script>
+</head>
+<body class="agent-page">
+<div class="aurora" aria-hidden="true"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M2 18h5l3-9 4 16 4-13 3 6h9" fill="none" stroke="url(#g3)" stroke-width="2.4"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <defs><linearGradient id="g3" x1="0" y1="0" x2="32" y2="0">
+        <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#a78bfa"/>
+      </linearGradient></defs>
+    </svg>
+    <div>
+      <h1>This device as a vantage point</h1>
+      <p class="tagline" id="agent-source">no source label</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="state-pill" id="agent-state" data-state="idle">
+      <span class="pulse"></span><span id="agent-state-text">starting…</span>
+    </div>
+    <div class="control-group" id="theme-chips" role="group" aria-label="Style"></div>
+    <button class="btn" id="btn-awake" type="button" title="Ask the browser to keep this screen on">Keep screen on</button>
+    <button class="btn" id="btn-toggle" type="button" hidden>Pause</button>
+  </div>
+</header>
+
+<section class="panel" id="agent-confirm">
+  <header class="panel-head">
+    <h2>Confirm this device before it reports</h2>
+    <div class="panel-note">nothing is measured until you continue</div>
+  </header>
+  <div class="confirm-grid">
+    <label class="stacked">Files measurements under
+      <input id="in-source" type="text" readonly>
+    </label>
+    <label class="stacked">To server
+      <input id="in-server" type="text" readonly>
+    </label>
+    <label class="stacked">This device looks like
+      <input id="in-platform" type="text" readonly>
+    </label>
+  </div>
+  <p class="meta dim" id="confirm-hint">—</p>
+  <button class="btn primary" id="btn-continue" type="button">Continue — start measuring this device</button>
+  <p class="meta dim">
+    The label comes from this device's own token, so nothing here can file
+    measurements under another device's name. Check it against the device in your
+    hand anyway: opening the phone's link on the laptop would measure the laptop
+    and file it as the phone. The server also records the platform above, so a
+    mix-up shows up in the record rather than staying silent.
+  </p>
+</section>
+
+<section class="cards" id="agent-cards" hidden></section>
+
+<section class="panel" id="agent-results" hidden>
+  <header class="panel-head">
+    <h2>What this device has measured</h2>
+    <div class="panel-note" id="agent-note">nothing leaves this device except the numbers below</div>
+  </header>
+  <div class="table-wrap">
+    <table class="data small">
+      <thead>
+        <tr><th>Target</th><th class="num">Probes</th><th class="num">Failed</th>
+            <th class="num">Fail %</th><th class="num">Last ms</th><th class="num">Avg ms</th>
+            <th class="num">Worst ms</th></tr>
+      </thead>
+      <tbody id="agent-body"><tr><td colspan="7" class="empty">waiting for the first cycle…</td></tr></tbody>
+    </table>
+  </div>
+  <p class="meta dim" id="agent-last">—</p>
+</section>
+
+<section class="panel" id="agent-recent" hidden>
+  <header class="panel-head">
+    <h2>Recent probes</h2>
+    <div class="panel-note" id="agent-count">0 reported</div>
+  </header>
+  <div class="table-wrap">
+    <table class="data small">
+      <thead><tr><th>Time</th><th>Target</th><th>Result</th></tr></thead>
+      <tbody id="agent-log"><tr><td colspan="3" class="empty">—</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
+  <header class="panel-head"><h2>Before you leave this running</h2></header>
+  <ul class="notes">
+    <li><strong>Keep this page in the foreground.</strong> Mobile browsers throttle or
+      suspend background tabs, so a screen that sleeps turns into a gap in the record.</li>
+    <li><strong>Nothing is stored on this device.</strong> Each measurement is posted
+      straight to DropTrace on your network; this page keeps only a running count.</li>
+    <li><strong>This measures HTTPS endpoints, not raw TCP.</strong> A browser cannot
+      open a bare TCP connection, so a failed probe here means "this device could not
+      complete a request", which is the question being asked: did the phone lose
+      connectivity at the same minutes the server did?</li>
+    <li id="wake-lock-note">Press <strong>Keep screen on</strong> after continuing. The
+      supported way is the screen Wake Lock API, which browsers only allow over HTTPS or
+      on localhost — on plain HTTP the page falls back to fullscreen playback, which is
+      best effort and Android may still sleep. For an unattended run of hours, the Python
+      agent on a laptop, or setting Android's screen timeout to its maximum, is more
+      reliable than any page trick.</li>
+    <li id="awake-status-line">Screen: not requested yet.</li>
+  </ul>
+</section>
+
+<footer class="footer">
+  <span>DropTrace agent</span>
+  <span id="agent-foot">—</span>
+</footer>
+
+<script src="/static/keepawake.js"></script>
+<script src="/static/agent.js"></script>
+</body>
+</html>
