@@ -41,6 +41,9 @@
 
   const $ = (id) => document.getElementById(id);
 
+  // Feedback while a window is being re-read; no-op if loading.js is missing.
+  const loading = window.dropTraceLoading || { begin() {}, end() {} };
+
   const num = (v, digits = 0) =>
     v === null || v === undefined ? "—" : Number(v).toLocaleString(undefined, {
       minimumFractionDigits: digits, maximumFractionDigits: digits,
@@ -500,9 +503,10 @@
     ).join("");
   }
 
-  async function load({ quiet = false } = {}) {
+  async function load({ quiet = false, explicit = false } = {}) {
     if (state.loading) return;
     state.loading = true;
+    loading.begin({ explicit });
     if (!quiet) $("daily-body").innerHTML = '<tr><td colspan="13" class="empty">loading…</td></tr>';
     try {
       const response = await fetch(`/api/stats?window=${encodeURIComponent(state.window)}`);
@@ -518,6 +522,7 @@
       }
     } finally {
       state.loading = false;
+      loading.end();
       updateLoadedLabel();
     }
   }
@@ -574,7 +579,7 @@
     if (!chip) return;
     state.window = chip.dataset.window;
     renderRangeChips();
-    load();
+    load({ explicit: true });
   });
 
   $("in-summary").addEventListener("change", (event) => {
@@ -594,5 +599,5 @@
   renderRangeChips();
   renderRefreshChips();
   updateLoadedLabel();
-  load().then(scheduleAutoRefresh);
+  load({ explicit: true }).then(scheduleAutoRefresh);
 })();

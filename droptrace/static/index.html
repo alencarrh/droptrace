@@ -11,6 +11,7 @@
 <script src="/static/theme.js"></script>
 </head>
 <body>
+<div class="load-bar" id="load-bar" hidden><i></i></div>
 <div class="aurora" aria-hidden="true"></div>
 
 <header class="topbar">
@@ -55,6 +56,7 @@
     <button class="btn" id="btn-ping" type="button" title="Run one probe round right now">Probe now</button>
     <button class="btn" id="btn-speed" type="button" title="Run a throughput test right now">Speed test</button>
   </div>
+  <span class="load-note" id="load-note" hidden>loading…</span>
   <div class="control-group range" id="range-group" role="group" aria-label="Time range">
     <button class="chip" data-window="5m" type="button">5m</button>
     <button class="chip" data-window="15m" type="button">15m</button>
@@ -401,6 +403,7 @@
 
 <script src="/static/vendor/chart.umd.min.js"></script>
 <script src="/static/keepawake.js"></script>
+<script src="/static/loading.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

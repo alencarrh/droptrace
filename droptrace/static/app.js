@@ -570,6 +570,7 @@
     // view cannot end up empty.
     if (until - since < 5) until = since + 5;
     status.range = { since, until };
+    status.wanted = true;     // a person asked: show the loading state
     status.seriesAt = 0;      // force a refetch for the new period
     $("btn-clear-range").hidden = false;
     const query = `since=${since}&until=${until}`;
@@ -1359,6 +1360,8 @@
   }
 
   /* ------------------------------------------------------------- refresh */
+  // Feedback while a window is being re-read; no-op if loading.js is missing.
+  const loading = window.dropTraceLoading || { begin() {}, end() {} };
   // The cards, banner and status pill want to be current; the charts do not
   // need re-downloading the whole window every 4 seconds. This keeps a
   // dashboard left open for hours from re-fetching ~90 KB four times a minute.
@@ -1372,25 +1375,28 @@
       const now = performance.now();
       const wantSeries = !status.series || now - (status.seriesAt || 0) > SERIES_INTERVAL_MS;
 
-      const [state, summary, speedTests] = await Promise.all([
+      // One phase, not two: the charts do not have to wait for the cards.
+      const explicit = status.wanted;
+      status.wanted = false;
+      loading.begin({ explicit });
+      const [state, summary, speedTests, series, incidents] = await Promise.all([
         getJSON("/api/status"),
         getJSON(`/api/summary?${query}`),
         getJSON("/api/samples?kind=speed&limit=20"),
+        wantSeries ? getJSON(`/api/series?${query}&max_points=600`) : null,
+        wantSeries ? getJSON(`/api/incidents?${query}&limit=200`) : null,
       ]);
       status.speedTests = speedTests.samples || [];
       status.status = state;
       status.statusAt = now;
       status.summary = summary;
-
-      if (wantSeries) {
-        const [series, incidents] = await Promise.all([
-          getJSON(`/api/series?${query}&max_points=600`),
-          getJSON(`/api/incidents?${query}&limit=200`),
-        ]);
+      if (series) {
         status.series = series;
+        status.seriesAt = now;
+      }
+      if (incidents) {
         status.incidents = incidents.incidents || [];
         status.ongoing = incidents.ongoing || [];
-        status.seriesAt = now;
       }
 
       if (state.speed_progress) {
@@ -1426,7 +1432,9 @@
         refreshAgents();
       }
       renderFooter();
+      loading.end();
     } catch (error) {
+      loading.end();
       $("foot-conn").textContent = `connection problem: ${error.message}`;
     } finally {
       status.refreshing = false;
@@ -1700,6 +1708,7 @@
       $("btn-csv").href = `/api/export.csv?${query}`;
       $("btn-csv-incidents").href = `/api/incidents.csv?${query}`;
       status.seriesAt = 0;   // a new range must refetch the series immediately
+      status.wanted = true;
       refresh();
     });
 
@@ -1710,6 +1719,7 @@
 
   /* ---------------------------------------------------------------- boot */
   async function boot() {
+    status.wanted = true;   // the first paint has nothing to show yet
     bindControls();
     bindBrush();
     try {

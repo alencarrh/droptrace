@@ -10,6 +10,7 @@ import secrets
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import Body, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, PlainTextResponse, StreamingResponse
@@ -188,6 +189,30 @@ def create_app(settings: Settings, store: Store, sampler: Sampler) -> FastAPI:
         )
 
     # ------------------------------------------------------------------- api
+    # ---------------------------------------------------------- read cache
+    # A few seconds of cache for the three expensive reads. Two reasons: the
+    # probes land every few seconds anyway, so a payload this fresh is what the
+    # page would have computed a moment ago; and the dashboard polls, so without
+    # this a wide window re-runs a 1.3s aggregation every few seconds and every
+    # request queues behind it on the single SQLite connection -- which is how
+    # clicking a range turned into a ten-second wait.
+    read_cache: dict[str, tuple[float, Any]] = {}
+    cache_ttl = 6.0
+
+    def cache_clear() -> None:
+        read_cache.clear()
+
+    async def cached(key: str, build):
+        now = time.monotonic()
+        hit = read_cache.get(key)
+        if hit and now - hit[0] < cache_ttl:
+            return hit[1]
+        value = await build()
+        if len(read_cache) >= 32:
+            read_cache.pop(min(read_cache, key=lambda k: read_cache[k][0]), None)
+        read_cache[key] = (now, value)
+        return value
+
     @app.get("/api/health")
     async def health() -> dict:
         return {
@@ -229,7 +254,9 @@ def create_app(settings: Settings, store: Store, sampler: Sampler) -> FastAPI:
     ) -> dict:
         start = _resolve_since(window, since)
         end = _resolve_until(until)
-        data = await store.summary(start, end)
+        data = await cached(
+            f"summary:{window}:{since}:{until}", lambda: store.summary(start, end)
+        )
         data["window"] = window or "1h"
         data["until"] = end
         data["uptime"]["downtime_pct"] = (
@@ -248,20 +275,23 @@ def create_app(settings: Settings, store: Store, sampler: Sampler) -> FastAPI:
     ) -> dict:
         start = _resolve_since(window, since)
         end = _resolve_until(until)
-        latency = await store.series("latency", start, max_points, end)
-        speed = await store.series("speed", start, max_points, end)
-        return {
-            "since": start,
-            "until": end,
-            "generated_at": time.time(),
-            "raw_cutoff": await store.raw_cutoff(),
-            "latency": latency,
-            "speed": speed,
-            "rounds": await store.round_states(start, max_points, end),
-            "incidents": [
-                _enrich_incident(r) for r in await store.incidents(start, limit=500, until=end)
-            ],
-        }
+
+        async def build() -> dict:
+            return {
+                "since": start,
+                "until": end,
+                "generated_at": time.time(),
+                "raw_cutoff": await store.raw_cutoff(),
+                "latency": await store.series("latency", start, max_points, end),
+                "speed": await store.series("speed", start, max_points, end),
+                "rounds": await store.round_states(start, max_points, end),
+                "incidents": [
+                    _enrich_incident(r)
+                    for r in await store.incidents(start, limit=500, until=end)
+                ],
+            }
+
+        return await cached(f"series:{window}:{since}:{until}:{max_points}", build)
 
     @app.get("/api/samples")
     async def samples(
@@ -345,6 +375,8 @@ def create_app(settings: Settings, store: Store, sampler: Sampler) -> FastAPI:
         """Change cadence / payload size / targets while running."""
         await _guard(request, store, settings)
         applied = sampler.update_settings(payload)
+        # Different knobs mean different numbers: do not keep serving the old ones.
+        cache_clear()
         rejected = sorted(set(payload) - set(applied))
         return {"applied": applied, "rejected": rejected, "settings": settings.to_dict()}
 
@@ -358,6 +390,8 @@ def create_app(settings: Settings, store: Store, sampler: Sampler) -> FastAPI:
                 await sampler.run_once("speed")
             return {"ran": kind, "running": False}
         sampler.request_run(kind)
+        # A manual probe should show up at once, not after the cache expires.
+        cache_clear()
         return {"requested": kind, "running": True}
 
     @app.post("/api/reset")
@@ -380,6 +414,7 @@ def create_app(settings: Settings, store: Store, sampler: Sampler) -> FastAPI:
                 detail="this deletes stored measurements; repeat with ?confirm=yes",
             )
         removed = await store.clear(kind)
+        cache_clear()
         sampler.counts = {"latency": 0, "speed": 0, "errors": 0, "rounds": 0}
         sampler.last_round = None
         sampler.last_speed = None
@@ -450,7 +485,9 @@ def create_app(settings: Settings, store: Store, sampler: Sampler) -> FastAPI:
         """Consolidated figures for the statistics page, across both tiers."""
         start = _resolve_since(window, since)
         end = _resolve_until(until) or time.time()
-        payload = await store.stats(start, end)
+        payload = await cached(
+            f"stats:{window}:{since}:{until}", lambda: store.stats(start, end)
+        )
         data = build_stats(payload, start, end)
         data["window"]["label"] = window or "1h"
         return data

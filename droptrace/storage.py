@@ -1356,6 +1356,119 @@ class Store:
             "sampled": raw_n,
         }
 
+    async def metrics_by_target(self, since: float, until: float | None = None) -> dict[str, dict]:
+        """avg/min/max/last of ``probe_ms`` per target, for the dashboard.
+
+        The target table asks one question -- the average per target -- and it
+        used to be answered with one aggregate query per target, each with its own
+        p95 sort and its own "last row" lookup: fourteen targets meant forty-two
+        queries and most of a day-wide page load.
+
+        Now it is one grouped pass over both storage tiers, plus one index lookup
+        per target for the newest value (``idx_samples_target_ts`` makes that
+        nearly free). The p95 is deliberately *not* here: nothing displays a
+        per-target p95, and computing one costs a sort per target, which is
+        exactly the cost this method exists to remove. The cards keep their p95,
+        because that one is shown.
+        """
+        raw_bounds, raw_params = _ts_bounds(max(since, await self._raw_floor()), until)
+        roll_bounds, roll_params = _hour_bounds(since, until)
+        cursor = await self.db.execute(
+            "SELECT target, SUM(n) n, SUM(sum_ms) sum_ms, MIN(min_ms) min_ms, MAX(max_ms) max_ms"
+            " FROM ("
+            "   SELECT target, COUNT(*) n, SUM(probe_ms) sum_ms,"
+            "          MIN(probe_ms) min_ms, MAX(probe_ms) max_ms"
+            "   FROM samples WHERE kind = 'latency' AND source = 'local'"
+            "    AND probe_ms IS NOT NULL" + raw_bounds +
+            "   GROUP BY target"
+            "   UNION ALL"
+            "   SELECT target, ok AS n, sum_ms, min_ms, max_ms FROM rollups"
+            "   WHERE kind = 'latency' AND ok IS NOT NULL" + roll_bounds +
+            " ) GROUP BY target",
+            (*raw_params, *roll_params),
+        )
+        folded = [dict(row) for row in await cursor.fetchall()]
+
+        cutoff = await self.raw_cutoff()
+        raw_since = max(since, cutoff) if cutoff else since
+        bounds, params = _ts_bounds(raw_since, until)
+        out: dict[str, dict] = {}
+        for row in folded:
+            count = int(row.get("n") or 0)
+            if not count:
+                continue
+            target = row["target"]
+            cursor = await self.db.execute(
+                "SELECT probe_ms FROM samples WHERE kind = 'latency' AND source = 'local'"
+                " AND target = ? AND probe_ms IS NOT NULL" + bounds +
+                " ORDER BY ts DESC, id DESC LIMIT 1",
+                (target, *params),
+            )
+            last = await cursor.fetchone()
+            out[target] = {
+                "avg": round(float(row["sum_ms"] or 0.0) / count, 3),
+                "min": _round(row.get("min_ms")),
+                "max": _round(row.get("max_ms")),
+                "last": round(float(last[0]), 3) if last is not None else None,
+                "n": count,
+            }
+        return out
+
+    async def metrics_by_tier(self, since: float, until: float | None = None) -> dict[str, dict]:
+        """Download and upload per tier, for the throughput cards.
+
+        Same shape the four single-metric calls produced, from one grouped pass
+        per direction plus a windowed pass for the p95 and the newest test. Speed
+        tests are rare (a couple of hundred rows a day), but they were costing
+        0.19s of a day-wide dashboard load in query overhead alone.
+        """
+        bounds, params = _ts_bounds(since, until)
+        out: dict[str, dict] = {}
+        for tier in ("quick", "sustained"):
+            entry: dict[str, dict] = {}
+            for column in SPEED_METRICS:
+                cursor = await self.db.execute(
+                    f"SELECT COUNT(*) n, SUM({column}) total, MIN({column}) low, MAX({column}) high"
+                    f" FROM samples WHERE kind = 'speed' AND source = 'local' AND tier = ?"
+                    f" AND {column} IS NOT NULL" + bounds,
+                    (tier, *params),
+                )
+                row = await cursor.fetchone()
+                count = int(row["n"] or 0)
+                if not count:
+                    entry[column] = None
+                    continue
+                cursor = await self.db.execute(
+                    f"SELECT {column} FROM samples WHERE kind = 'speed' AND source = 'local'"
+                    f" AND tier = ? AND {column} IS NOT NULL" + bounds +
+                    " ORDER BY ts DESC, id DESC LIMIT 1",
+                    (tier, *params),
+                )
+                last = await cursor.fetchone()
+                offset = max(0, math.ceil(count * 0.95) - 1)
+                cursor = await self.db.execute(
+                    f"SELECT {column} FROM samples WHERE kind = 'speed' AND source = 'local'"
+                    f" AND tier = ? AND {column} IS NOT NULL" + bounds +
+                    f" ORDER BY {column} ASC LIMIT 1 OFFSET ?",
+                    (tier, *params, offset),
+                )
+                p95 = await cursor.fetchone()
+                entry[column] = {
+                    "avg": round(float(row["total"] or 0.0) / count, 3),
+                    "min": _round(row["low"]),
+                    "max": _round(row["high"]),
+                    "p95": round(float(p95[0]), 3) if p95 is not None else None,
+                    "last": round(float(last[0]), 3) if last is not None else None,
+                    "n": count,
+                    "sampled": count,
+                }
+            out[tier] = entry
+        return out
+
+    async def _raw_floor(self) -> float:
+        """Where the raw probes start, so a wide window does not rescan them all."""
+        return float(await self.raw_cutoff() or 0.0)
+
     async def uptime(self, since: float, until: float | None = None) -> dict:
         """Round-level uptime: a round is up if any internet target answered."""
         cutoff = await self.raw_cutoff()
@@ -1418,21 +1531,12 @@ class Store:
             metric: await self._metric("latency", since, metric, role="internet", until=until)
             for metric in LATENCY_METRICS
         }
-        by_target: dict[str, dict] = {}
-        for target in await self.target_names("latency", since, until):
-            by_target[target] = await self._metric(
-                "latency", since, "probe_ms", target=target, until=until
-            )
+        # One grouped pass instead of a query per target; see the method.
+        by_target = await self.metrics_by_target(since, until)
 
         # Burst and sustained numbers answer different questions and must never
         # be averaged together.
-        speed = {
-            tier: {
-                metric: await self._metric("speed", since, metric, tier=tier, until=until)
-                for metric in SPEED_METRICS
-            }
-            for tier in ("quick", "sustained")
-        }
+        speed = await self.metrics_by_tier(since, until)
 
         counts = {
             "latency": await self.count("latency", since, until),
@@ -1671,6 +1775,11 @@ class Store:
                 ]
             )
         return buffer.getvalue()
+
+
+def _round(value: Any, digits: int = 3) -> float | None:
+    """Round a nullable SQL value, keeping None as None."""
+    return None if value is None else round(float(value), digits)
 
 
 def _row_to_dict(row: aiosqlite.Row | None) -> dict:

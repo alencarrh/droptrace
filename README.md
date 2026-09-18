@@ -1032,6 +1032,16 @@ Three things worth knowing about what it shows:
   still exist and hourly rollups for the older part, re-summing by hour, so the
   numbers do not change when probes are folded.
 
+**A wide window takes a moment, and says so.** The statistics page and the
+dashboard both re-read a window of probes on demand, so a bar appears at the top
+of the page while that is happening, with the panes dimmed and the range chips
+refusing clicks — a fast fetch never flashes it, and a slow one never looks
+frozen. The three expensive reads are also cached for six seconds, which is
+shorter than the probe cadence: without that, the dashboard's own poll re-ran a
+1.5-second aggregation every few seconds and every request queued behind it on
+the single SQLite connection, which is how switching the range became a
+ten-second wait.
+
 **Auto refresh** is off by default; the chips beside the window selector pick 10s,
 30s, 1m or 10m, and the choice travels in the URL (`?refresh=30s`), so a bookmark
 can open the page already live. It stops while the tab is hidden and catches up the

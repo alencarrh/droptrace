@@ -11,6 +11,7 @@
 <script src="/static/theme.js"></script>
 </head>
 <body class="stats-page">
+<div class="load-bar" id="load-bar" hidden><i></i></div>
 <div class="aurora" aria-hidden="true"></div>
 
 <header class="topbar">
@@ -29,6 +30,7 @@
   </div>
 
   <div class="topbar-right">
+    <span class="load-note" id="load-note" hidden>loading…</span>
     <div class="control-group" id="stats-range"></div>
     <div class="control-group refresh-group" id="stats-refresh" role="group"
          aria-label="Refresh automatically">
@@ -232,6 +234,7 @@
 </footer>
 
 <script src="/static/keepawake.js"></script>
+<script src="/static/loading.js"></script>
 <script src="/static/stats.js"></script>
 </body>
 </html>
