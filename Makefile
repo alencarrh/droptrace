@@ -6,7 +6,8 @@ LATENCY ?= 5
 QUICK   ?= 600
 HOLD    ?= 3600
 DURATION?= 0
-DB      ?= data/droptrace.db
+# On the Linux filesystem: SQLite through /mnt is several times slower.
+DB      ?= $(HOME)/.local/share/droptrace/droptrace.db
 
 # The venv is optional. Not every machine can build one (Ubuntu without
 # python3-venv has no ensurepip), and the dependencies are often already

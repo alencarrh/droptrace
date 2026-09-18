@@ -559,3 +559,42 @@ async def test_bursts_are_stored_apart_from_the_round_probes(store):
     assert await store.count("latency") == 1
     failures = await store.failures(now - 60)
     assert [f["target"] for f in failures] == [], "a burst is not a failed probe"
+
+
+async def test_device_totals_and_the_hourly_strip_come_from_one_query(store):
+    """Both per-device views are folded from the same scan of the probes.
+
+    They used to be two queries over the same rows, which on a seven-day window
+    meant reading the whole table twice for one page. The numbers must not
+    change: the strip counts internet probes (the ones the verdicts use), the
+    table above it counts every probe the device sent.
+    """
+    now = time.time()
+    await store.add_many([
+        {**latency_sample(now - 30, 12.0, "cloudflare", round_id=1), "source": "local"},
+        {**latency_sample(now - 30, 3.0, "resolver", "local", round_id=1), "source": "local"},
+        {**latency_sample(now - 20, 20.0, "cloudflare", ok=False, error="timeout", round_id=2),
+         "source": "phone-wifi"},
+        {**latency_sample(now - 4000, 11.0, "cloudflare", round_id=3), "source": "phone-wifi"},
+    ])
+    payload = await store.stats(now - 7200, now)
+
+    by_name = {row["source"]: row for row in payload["sources"]}
+    assert by_name["local"]["probes"] == 2, "every role counts in the device table"
+    assert by_name["local"]["internet_probes"] == 1
+    assert by_name["local"]["internet_failed"] == 0
+    assert by_name["phone-wifi"]["probes"] == 2
+    assert by_name["phone-wifi"]["internet_probes"] == 2
+    assert by_name["phone-wifi"]["internet_failed"] == 1
+    assert by_name["phone-wifi"]["first_ts"] == pytest.approx(now - 4000, abs=2)
+    assert by_name["phone-wifi"]["last_ts"] == pytest.approx(now - 20, abs=2)
+
+    hour_rows = payload["source_hours"]
+    local_rows = [row for row in hour_rows if row["source"] == "local"]
+    assert sum(row["all_probes"] for row in local_rows) == 2
+    assert sum(row["probes"] for row in local_rows) == 1, "the strip counts internet probes"
+    # One row per device per hour, so the fold above really did aggregate.
+    phone_rows = [row for row in hour_rows if row["source"] == "phone-wifi"]
+    assert len(phone_rows) == 2
+    assert sum(row["probes"] for row in phone_rows) == 2
+    assert sum(row["failed"] for row in phone_rows) == 1

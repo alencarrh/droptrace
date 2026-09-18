@@ -181,7 +181,7 @@ def add_common(parser: argparse.ArgumentParser) -> None:
     xfer.add_argument("--no-upload", action="store_true", help="disable upload tests")
 
     store_group = parser.add_argument_group("storage")
-    store_group.add_argument("--db", dest="db_path", metavar="PATH", help="SQLite file (default data/droptrace.db)")
+    store_group.add_argument("--db", dest="db_path", metavar="PATH", help="SQLite file (default ~/.local/share/droptrace/droptrace.db)")
     store_group.add_argument("--retention-days", type=float, metavar="N", help="prune data older than N days")
 
 

@@ -253,7 +253,14 @@ class Settings:
     enable_upload: bool = True
 
     # --- storage -----------------------------------------------------------
-    db_path: Path = field(default_factory=lambda: Path("data/droptrace.db"))
+    # Where the record lives. Deliberately not inside the checkout: under WSL
+    # the project sits on /mnt/c or /mnt/f, which is a 9p mount, and SQLite
+    # reading 160 MB of probes through it took six times longer than the same
+    # file on the Linux filesystem -- twenty seconds to draw one statistics
+    # page. Override with --db or DROPTRACE_DB_PATH to put it anywhere.
+    db_path: Path = field(
+        default_factory=lambda: Path.home() / ".local/share/droptrace/droptrace.db"
+    )
     # Keep every individual probe for this long, then keep hourly statistics and
     # the failures forever. Raw probes are ~234 bytes each and 86,400 of them
     # arrive per day at the 5s default; an hour of statistics is one row per

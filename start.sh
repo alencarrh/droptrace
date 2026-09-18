@@ -17,7 +17,10 @@ PORT="${PORT:-8777}"
 # 0.0.0.0 so the phone and the laptop can reach it; BIND=127.0.0.1 keeps it local.
 BIND="${BIND:-0.0.0.0}"
 PYTHON="${PYTHON:-python3}"
-DB="${DB:-data/droptrace.db}"
+# The record lives on the Linux filesystem: SQLite over the /mnt 9p mount is
+# several times slower, which showed up as a twenty-second statistics page.
+DB="${DB:-$HOME/.local/share/droptrace/droptrace.db}"
+mkdir -p "$(dirname "$DB")"
 
 # Prefer the project venv when it exists (make install creates it).
 if [ -x ".venv/bin/python" ]; then
@@ -35,6 +38,7 @@ echo
 echo "  DropTrace — starting (Ctrl+C to stop)"
 echo "  Dashboard: http://127.0.0.1:${PORT}/"
 echo "  From another device: http://<this-machine-ip>:${PORT}/  (only with BIND=0.0.0.0)"
+echo "  Database: ${DB}"
 echo
 
 exec "$PYTHON" -m droptrace serve --web-port "$PORT" --db "$DB" --bind "$BIND" --open "$@"

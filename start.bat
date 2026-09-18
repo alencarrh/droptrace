@@ -23,11 +23,9 @@ echo   Leave this window open while you monitor. Close it (or press Ctrl+C
 echo   here) to stop sampling.
 echo.
 
-rem Open the dashboard once the server answers (max ~30s), in a helper window.
-start "" /min cmd /c "for /l %%i in (1,1,60) do (curl -s -o nul http://127.0.0.1:%PORT%/api/health && (start "" http://127.0.0.1:%PORT%/ & exit) || timeout /t 1 /nobreak >nul)"
-
-rem Run the server in the foreground so this window shows the log.
-wsl.exe -d %DISTRO% --cd "%WSLDIR%" -e python3 -m droptrace serve --web-port %PORT% --bind %BIND% --db data/droptrace.db
+rem Run the server in the foreground so this window shows the log. start.sh
+rem owns the port, the bind address, the database path and opening the browser.
+wsl.exe -d %DISTRO% --cd "%WSLDIR%" -e bash -lc "PORT=%PORT% BIND=%BIND% ./start.sh"
 
 echo.
 echo   DropTrace stopped.

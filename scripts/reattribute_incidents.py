@@ -84,7 +84,11 @@ def backup(path: Path) -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--db", default="data/droptrace.db", type=Path)
+    parser.add_argument(
+        "--db",
+        default=str(Path.home() / ".local/share/droptrace/droptrace.db"),
+        type=Path,
+    )
     parser.add_argument("--apply", action="store_true", help="write the changes")
     args = parser.parse_args(argv)
 

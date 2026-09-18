@@ -636,12 +636,28 @@ hop-by-hop table below the pair is what names where it stopped.
 
 ### Where the data lives
 
-`data/droptrace.db` next to the project — SQLite in WAL mode, with `-wal` and
+`~/.local/share/droptrace/droptrace.db` — SQLite in WAL mode, with `-wal` and
 `-shm` sidecars. Move it anywhere with `--db /path/to/file.db` or
-`DROPTRACE_DB_PATH`. It is gitignored and never committed.
+`DROPTRACE_DB_PATH`. It is never committed.
+
+**Why not next to the project.** Under WSL the checkout lives on a Windows drive
+(`/mnt/c`, `/mnt/f`), which is a 9p mount, and SQLite reading a six-day record of
+probes through it took **six times longer** than the same file on the Linux
+filesystem: a seven-day `/api/stats` took 20 seconds, of which 18 was I/O. On the
+Linux side the same query is ~1.4s. So the default lives in your home directory,
+and `--db` lets you point it at an external drive, a network share or a copy.
+
+If you have a database from an older version next to the project, move it (or
+copy it and keep the original as a backup):
+
+```bash
+mkdir -p ~/.local/share/droptrace
+mv data/droptrace.db* ~/.local/share/droptrace/
+```
 
 Two tables: `samples` (one row per probe) and `outages` (one row per incident).
-Export anything from the page, or with `sqlite3 data/droptrace.db "select ..."`.
+Export anything from the page, or with
+`sqlite3 ~/.local/share/droptrace/droptrace.db "select ..."`.
 
 ### How long it is kept
 
@@ -1123,8 +1139,9 @@ witness. It reads the stored samples, changes nothing without `--apply`, and
 copies the database first when it does:
 
 ```bash
-python3 scripts/reattribute_incidents.py --db data/droptrace.db            # show
-python3 scripts/reattribute_incidents.py --db data/droptrace.db --apply    # write
+DB=~/.local/share/droptrace/droptrace.db
+python3 scripts/reattribute_incidents.py --db "$DB"            # show
+python3 scripts/reattribute_incidents.py --db "$DB" --apply    # write
 ```
 
 ## Layout
@@ -1156,5 +1173,5 @@ droptrace/
     └── static/        index.html, app.js, styles.css, the style sheet, vendored Chart.js
 ```
 
-Data lives in `data/droptrace.db` (SQLite, WAL mode) and is pruned after
+Data lives in `~/.local/share/droptrace/droptrace.db` (SQLite, WAL mode) and is pruned after
 `--retention-days` (default 30). The database is never committed.

@@ -226,6 +226,10 @@ INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_samples_kind_ts ON samples (kind, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_samples_target_ts ON samples (target, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_samples_round ON samples (round_id);
+-- Round counting walks every latency probe and reads only (round, role, ok,
+-- ts): with these in the index it never touches the table itself, which on a
+-- seven-day window is the difference between 0.6s and 0.2s.
+CREATE INDEX IF NOT EXISTS idx_samples_kind_round ON samples (kind, round_id, role, ok, ts);
 CREATE INDEX IF NOT EXISTS idx_samples_source_ts ON samples (source, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_outages_started ON outages (started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_outages_open ON outages (kind, ongoing);
@@ -663,27 +667,6 @@ class Store:
         cursor = await self.db.execute("SELECT * FROM agents")
         return {row["source"]: dict(row) for row in await cursor.fetchall()}
 
-    async def sources(self, since: float, until: float | None = None) -> list[dict]:
-        """Per-vantage-point probe health, for comparing devices.
-
-        Remote probes live only in the raw table (they are not folded into the
-        hourly rollups, which describe this machine), so this view is bounded by
-        the raw window -- which is what makes it comparable anyway: both sides
-        have to be measured over the same period by the same rules.
-        """
-        bounds, params = _ts_bounds(since, until)
-        cursor = await self.db.execute(
-            "SELECT source, COUNT(*) probes,"
-            " SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) failed,"
-            " MIN(ts) first_ts, MAX(ts) last_ts,"
-            " SUM(CASE WHEN role = 'internet' THEN 1 ELSE 0 END) internet_probes,"
-            " SUM(CASE WHEN role = 'internet' AND ok = 0 THEN 1 ELSE 0 END) internet_failed"
-            " FROM samples WHERE kind = 'latency'" + bounds +
-            " GROUP BY source ORDER BY source",
-            tuple(params),
-        )
-        return [_row_to_dict(r) for r in await cursor.fetchall()]
-
     async def last_seen(self, within: float = 3600.0) -> dict[str, float]:
         """When each vantage point last reported, for the live on/off indicator.
 
@@ -701,16 +684,52 @@ class Store:
         return {row["source"]: float(row["last_ts"]) for row in await cursor.fetchall()}
 
     async def source_hours(self, since: float, until: float | None = None) -> list[dict]:
-        """Failed probes per source per hour: the shape of 'did both devices drop?'"""
+        """Per device, per hour: how much it reported and how much it lost.
+
+        One pass answers both questions the statistics page asks about vantage
+        points: the hourly strip (``probes``/``failed``, internet role only, the
+        same numbers the round verdicts use) and the per-device totals in the
+        table above it (``all_probes``/``all_failed``, every role, plus the first
+        and last timestamp). Splitting those into two queries cost a second full
+        scan of the table, which is the last thing a page that reads seven days
+        of probes can afford.
+        """
         bounds, params = _ts_bounds(since, until)
         cursor = await self.db.execute(
             "SELECT source, CAST(ts / 3600 AS INTEGER) * 3600 AS hour,"
-            " COUNT(*) probes, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) failed"
-            " FROM samples WHERE kind = 'latency' AND role = 'internet'" + bounds +
+            " COUNT(*) all_probes, SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) all_failed,"
+            " SUM(CASE WHEN role = 'internet' THEN 1 ELSE 0 END) probes,"
+            " SUM(CASE WHEN role = 'internet' AND ok = 0 THEN 1 ELSE 0 END) failed,"
+            " MIN(ts) first_ts, MAX(ts) last_ts"
+            " FROM samples WHERE kind = 'latency'" + bounds +
             " GROUP BY source, hour ORDER BY hour ASC",
             tuple(params),
         )
         return [_row_to_dict(r) for r in await cursor.fetchall()]
+
+    @staticmethod
+    def fold_sources(hours: Sequence[dict]) -> list[dict]:
+        """Per-device totals, folded from the hourly rows above.
+
+        Same numbers the separate query produced, without the second scan.
+        """
+        folded: dict[str, dict] = {}
+        for row in hours:
+            source = row.get("source") or ""
+            entry = folded.setdefault(source, {
+                "source": source, "probes": 0, "failed": 0, "internet_probes": 0,
+                "internet_failed": 0, "first_ts": None, "last_ts": None,
+            })
+            entry["probes"] += int(row.get("all_probes") or 0)
+            entry["failed"] += int(row.get("all_failed") or 0)
+            entry["internet_probes"] += int(row.get("probes") or 0)
+            entry["internet_failed"] += int(row.get("failed") or 0)
+            first, last = row.get("first_ts"), row.get("last_ts")
+            if first is not None:
+                entry["first_ts"] = first if entry["first_ts"] is None else min(entry["first_ts"], first)
+            if last is not None:
+                entry["last_ts"] = last if entry["last_ts"] is None else max(entry["last_ts"], last)
+        return [folded[key] for key in sorted(folded)]
 
     async def failures(
         self, since: float = 0.0, until: float | None = None, limit: int = 500
@@ -877,6 +896,9 @@ class Store:
         """
         hours = await self.hourly_latency(since, until)
         rounds = await self.hourly_rounds(since, until)
+        # One query for both per-device views: the hourly strip and the totals
+        # above it. They used to be two scans of the same rows.
+        device_hours = await self.source_hours(since, until)
         return {
             "hours": hours,
             "rounds": rounds,
@@ -884,9 +906,9 @@ class Store:
             "speed": await self._speed_rows(since, until),
             "failures": await self._failure_stats(since, until),
             "bursts": await self.bursts(since, until, limit=500),
-            "sources": await self.sources(since, until),
+            "sources": self.fold_sources(device_hours),
             "agents": await self.agents(),
-            "source_hours": await self.source_hours(since, until),
+            "source_hours": device_hours,
             # Only the newest few: the panel compares the last drop with the
             # last healthy path, and hop lists are the biggest rows here.
             "traces": await self.traces(since, until, limit=12),

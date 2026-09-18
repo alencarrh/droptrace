@@ -42,7 +42,8 @@ reaching the dashboard from a phone is optional and can stay undone.
 > **`wsl --shutdown` stops everything in WSL**: containers, dev servers, the
 > DropTrace dashboard, and any terminal session. Nothing is lost that matters: the
 > database is SQLite in WAL mode with an hourly checkpoint, and there is already a
-> copy at `data/droptrace.db.backup-20260915-193327`.
+> copy at `data/droptrace.db.backup-20260915-193327` (that copy predates the
+> move of the default database to `~/.local/share/droptrace/`).
 
 **Which steps need Administrator?** Only the firewall step (3) and the verify
 step (8). `wsl --shutdown` itself does not. Running everything in one admin window
@@ -439,7 +440,7 @@ the router from the host's own route table, so the `lan` target still answers.
 | Second start exits with *"Another DropTrace is already sampling"* | The single-instance lock working as intended: an older server still holds the database. Stop it (above) or start with `--db` pointing somewhere else. |
 | Phone cannot load the page, Windows can | `--bind 0.0.0.0` is missing (`ss -ltnp` shows `127.0.0.1:8777`), or the firewall rule's profile does not match the active network. |
 | Windows browser on `http://localhost:8777/` stops working | It normally keeps working; if not, use `http://192.168.1.50:8777/`. |
-| `Another DropTrace is already sampling data/droptrace.db` | An older instance survived. `wsl --shutdown` clears it, or start with `--db` pointing at another file. Never run two against one database: they halve the round spacing and double every count. |
+| `Another DropTrace is already sampling <database>` | An older instance survived. `wsl --shutdown` clears it, or start with `--db` pointing at another file. Never run two against one database: they halve the round spacing and double every count. |
 | `make test` / `make serve` complain about missing dependencies | This Ubuntu has no `python3-venv` (`ensurepip` is missing), so `make install` cannot build a venv. The Makefile falls back to the system interpreter, which already has the dependencies, so `make test` and `make serve` work as-is. To get a venv: `sudo apt install python3-venv && make install`. |
 | `/etc/resolv.conf` still says `10.255.255.254` | Expected: WSL's DNS tunnelling. Harmless, and irrelevant to attribution — the router target is what proves the LAN. |
 | Phone page loads but charts are empty | The range selector is set to a short window, or sampling is paused. Check the footer says *live* and the pill says *watching*. |
