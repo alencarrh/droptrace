@@ -439,6 +439,98 @@
   }
 
   /* --------------------------------------------------------- drop strip */
+  /**
+   * The strip, as spans of time rather than one equal block per round.
+   *
+   * Blocks are laid out in proportion to the time they cover, and the stretches
+   * with no probes at all — DropTrace was not running, or the machine was
+   * asleep — become their own hatched bands. Without them the strip simply
+   * closed the hole: three hours with the application closed looked exactly like
+   * three hours of a healthy connection, which is the one thing this page must
+   * never imply.
+   */
+  function stripBlocks(rounds, step, since, until) {
+    const now = Date.now() / 1000;
+    const end = Math.min(until || now, now);
+    const interval = Number(
+      (status.status && status.status.latency_interval) ||
+      (status.config && status.config.latency_interval) || 5
+    ) || 5;
+    const spacings = [];
+    for (let i = 1; i < rounds.length; i += 1) spacings.push(rounds[i].ts - rounds[i - 1].ts);
+    const sorted = spacings.slice().sort((a, b) => a - b);
+    const normal = sorted.length ? sorted[Math.floor(sorted.length / 2)] : interval;
+    // One kept block stands for `step` rounds; anything well past that is silence
+    // rather than a stride.
+    const expected = Math.max(normal, interval * Math.max(1, step)) * 1.8;
+
+    const blocks = [];
+    const first = rounds[0];
+    if (since && since > 0 && first.ts - since > expected) {
+      blocks.push({ kind: "gap", ts: since, end: first.ts });
+    }
+    rounds.forEach((round, index) => {
+      const next = rounds[index + 1];
+      const span = next ? next.ts - round.ts : Math.max(normal, interval);
+      const own = round.hourly ? 3600 : Math.min(span, Math.max(interval, normal));
+      blocks.push({ kind: "round", round, ts: round.ts, end: round.ts + own });
+      if (next && span > own + expected) {
+        blocks.push({ kind: "gap", ts: round.ts + own, end: next.ts });
+      }
+    });
+    const tail = blocks[blocks.length - 1];
+    if (end - tail.end > expected) {
+      blocks.push({ kind: "gap", ts: tail.end, end });
+    }
+    return blocks;
+  }
+
+  function mergeBlocks(blocks, slowAbove) {
+    const out = [];
+    blocks.forEach((block) => {
+      let cls = "gap";
+      let body = "";
+      if (block.kind === "gap") {
+        const away = block.end - block.ts;
+        body = `no probes for ${fmtDuration(away)}: DropTrace was not running`;
+      } else {
+        const r = block.round;
+        const up = Number(r.up) === 1;
+        if (r.hourly) {
+          const down = Number(r.failed_n) || 0;
+          const of = Number(r.probes) || 0;
+          cls = down ? "down" : "up";
+          body = down
+            ? `hourly: ${down} of ${of} rounds with no internet`
+            : `hourly: all ${of} rounds reachable`;
+        } else if (!up) {
+          cls = "down";
+          body = "NO INTERNET";
+        } else if (r.avg_ms != null && r.avg_ms > slowAbove) {
+          cls = "up-slow";
+          body = `reachable but slow (${fmtMs(r.avg_ms)} ms)`;
+        } else {
+          cls = "up";
+          body = "reachable";
+        }
+        if (r.failed) body += ` · failed: ${r.failed}`;
+      }
+      const last = out[out.length - 1];
+      if (last && last.cls === cls && block.ts - last.end < 1) {
+        last.end = block.end;
+        last.count += 1;
+        last.title = `${fmtDayTime(last.ts)} → ${fmtDayTime(last.end)} — ${last.body}` +
+          (last.count > 1 ? ` (${last.count} blocks)` : "");
+        return;
+      }
+      out.push({
+        cls, ts: block.ts, end: block.end, count: 1, body,
+        title: `${fmtDayTime(block.ts)} — ${body}`,
+      });
+    });
+    return out;
+  }
+
   function renderStrip() {
     const el = $("strip");
     const bucket = (status.series && status.series.rounds) || {};
@@ -453,49 +545,41 @@
     const median = latencies.length ? latencies[Math.floor(latencies.length / 2)] : null;
     const slowAbove = median ? median * 3 : Infinity;
 
-    el.innerHTML = rounds
-      .map((r) => {
-        const up = Number(r.up) === 1;
-        let cls = "up";
-        let note = "reachable";
-        if (r.hourly) {
-          const down = Number(r.failed_n) || 0;
-          const of = Number(r.probes) || 0;
-          note = down
-            ? `hourly: ${down} of ${of} rounds with no internet`
-            : `hourly: all ${of} rounds reachable`;
-        } else if (!up) {
-          cls = "down";
-          note = "NO INTERNET";
-        } else if (r.avg_ms != null && r.avg_ms > slowAbove) {
-          cls = "up-slow";
-          note = `reachable but slow (${fmtMs(r.avg_ms)} ms)`;
-        }
-        const failed = r.failed ? ` · failed: ${r.failed}` : "";
-        const title = `${fmtDayTime(r.ts)} — ${note}${failed}`;
-        return `<span class="tick ${cls}" title="${escapeHtml(title)}"></span>`;
-      })
+    const blocks = mergeBlocks(
+      stripBlocks(
+        rounds, bucket.step || 1,
+        (status.series && status.series.since) || 0,
+        (status.series && status.series.until) || null
+      ),
+      slowAbove
+    );
+    const span = blocks.reduce((sum, b) => sum + Math.max(1, b.end - b.ts), 0) || 1;
+    const width = (b) => `flex:0 0 ${((Math.max(1, b.end - b.ts) / span) * 100).toFixed(4)}%`;
+
+    el.innerHTML = blocks
+      .map((block) => `<span class="tick ${block.cls}" data-ts="${block.ts}" data-end="${block.end}"
+                             style="${width(block)}" title="${escapeHtml(block.title)}"></span>`)
       .join("");
 
+    const ticks = Array.from(el.querySelectorAll(".tick"));
     if (status.range) {
-      const host = $("strip-host").getBoundingClientRect();
-      const ticks = Array.from(el.querySelectorAll(".tick"));
-      const indexOf = (ts) => {
-        let picked = 0;
-        rounds.forEach((round, index) => {
-          if (round.ts <= ts) picked = index;
+      // Pick by timestamp, not by position: the blocks are time-proportional now,
+      // and a gap band sits where a round used to be.
+      const pick = (ts) => {
+        let chosen = ticks[0];
+        ticks.forEach((tick) => {
+          if (Number(tick.dataset.ts) <= ts) chosen = tick;
         });
-        return picked;
+        return chosen;
       };
-      const first = ticks[indexOf(status.range.since)];
-      const last = ticks[indexOf(status.range.until)] || ticks[ticks.length - 1];
+      const first = pick(status.range.since);
+      const last = pick(status.range.until) || ticks[ticks.length - 1];
       if (first && last) {
         const a = first.getBoundingClientRect();
         const b = last.getBoundingClientRect();
         paintSelection(a.left, b.right);
         $("btn-clear-range").hidden = false;
       }
-      void host;
     } else {
       $("strip-selection").hidden = true;
       $("btn-clear-range").hidden = true;
@@ -503,6 +587,9 @@
 
     const step = bucket.step || 1;
     const down = rounds.filter((r) => Number(r.up) !== 1).length;
+    const offline = blocks
+      .filter((b) => b.cls === "gap")
+      .reduce((sum, b) => sum + (b.end - b.ts), 0);
     const zoom = status.range
       ? `zoomed to ${fmtTime(status.range.since)} → ${fmtTime(status.range.until)} (${fmtDuration(status.range.until - status.range.since)}) · `
       : "";
@@ -510,32 +597,28 @@
       zoom +
       `${fmtDayTime(rounds[0].ts)} → ${fmtDayTime(rounds[rounds.length - 1].ts)} · ` +
       `${rounds.length} of ${bucket.total} rounds${step > 1 ? ` (1 in ${step}, outages always shown)` : ""}` +
-      (down ? ` · ${down} red` : "");
+      (down ? ` · ${down} red` : "") +
+      (offline > 90 ? ` · ${fmtDuration(offline)} with no sampling` : "");
   }
 
-  /* ----------------------------------------------------- timeline brush */
-  let brush = null;
-
-  /** The timestamp under a client X, using the ticks actually on screen. */
   function timestampAt(clientX) {
-    const rounds = (status.series && status.series.rounds && status.series.rounds.rounds) || [];
     const ticks = Array.from($("strip").querySelectorAll(".tick"));
-    if (!ticks.length || !rounds.length) return null;
+    if (!ticks.length) return null;
     let best = null;
     let bestDistance = Infinity;
-    ticks.forEach((tick, index) => {
-      const round = rounds[index];
-      if (!round) return;
+    ticks.forEach((tick) => {
+      const ts = Number(tick.dataset ? tick.dataset.ts : NaN);
+      if (!Number.isFinite(ts)) return;
       const box = tick.getBoundingClientRect();
       if (clientX >= box.left && clientX <= box.right) {
-        best = round.ts;
+        best = ts;
         bestDistance = 0;
         return;
       }
       const distance = Math.min(Math.abs(clientX - box.left), Math.abs(clientX - box.right));
       if (distance < bestDistance) {
         bestDistance = distance;
-        best = round.ts;
+        best = ts;
       }
     });
     return best;
@@ -578,6 +661,9 @@
     $("btn-csv-incidents").href = `/api/incidents.csv?${query}`;
     refresh();
   }
+
+  // The drag in progress, or null: one brush at a time, shared by mouse and touch.
+  let brush = null;
 
   function bindBrush() {
     const strip = $("strip");

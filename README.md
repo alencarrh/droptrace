@@ -340,9 +340,14 @@ terminal needed once it is running.
   download, upload, each with its average/peak for the selected range.
 * **Outage banner** — red and pulsing, with a live timer and the number of failed
   rounds, while connectivity is down.
-* **Connection timeline** — one block per round; red blocks are the drops. A
+* **Connection timeline** — one block per round, laid out **in proportion to the
+  time it covers** so a long drop looks long; red blocks are drops, and a
   healthy-but-slow round (over 3× the median) is amber. Downsampling never hides
-  a red block. **Drag across it to zoom into a period**, Grafana style: the whole
+  a red block. Stretches with **no probes at all** — the app was closed, the
+  machine was asleep — are drawn as hatched bands with their duration, and the
+  caption adds up the total: without them the strip closed the hole and three
+  hours with DropTrace closed looked exactly like three hours of a healthy
+  connection. **Drag across it to zoom into a period**, Grafana style: the whole
   dashboard (cards, charts, outage table) then shows only that window, and
   `Clear selection` returns to the presets. Downloads follow the same range.
 * **Latency per target** — one line per target. Gaps mean *no answer*, so an

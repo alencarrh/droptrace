@@ -242,14 +242,19 @@ main {
 
 /* ----------------------------------------------------------- drop strip */
 .strip {
-  display: flex; gap: 1px; align-items: stretch;
+  /* No gap: the blocks are laid out in proportion to the time they cover, so a
+     1px gap between them would be a lie about the axis (and a few hundred of
+     them would eat the strip). */
+  display: flex; gap: 0; align-items: stretch;
   height: 46px; padding: 3px;
   border-radius: 10px; background: rgba(6, 11, 22, 0.75);
   border: 1px solid var(--border);
   overflow: hidden;
 }
+/* A block is a span of time now, so it is a rectangle, not a pill: with 600 of
+   them a rounded corner on a two-pixel block leaves a pinstripe of background. */
 .strip .tick {
-  flex: 1 1 0; min-width: 1px; border-radius: 2px;
+  flex: 1 1 0; min-width: 1px; border-radius: 0;
   background: rgba(52, 211, 153, 0.55);
   transition: background 0.15s ease;
 }
@@ -257,6 +262,12 @@ main {
 .strip .tick.up-slow { background: rgba(251, 191, 36, 0.8); }
 .strip .tick.down { background: var(--rose); box-shadow: 0 0 8px rgba(251, 113, 133, 0.8); }
 .strip .tick:hover { outline: 1px solid rgba(232, 238, 251, 0.5); }
+/* Hours with no probes at all: DropTrace was not running, or the machine was
+   asleep. Hatched, like every other "no data" mark on the page. */
+.strip .tick.gap {
+  background: repeating-linear-gradient(45deg, #475569 0 3px, #1b2434 3px 6px);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.55);
+}
 .strip .empty { flex: 1; display: grid; place-items: center; color: var(--dim); font-size: 0.78rem; }
 /* Brushing: pick a period by dragging across the timeline, as in Grafana. */
 .strip-host { position: relative; }

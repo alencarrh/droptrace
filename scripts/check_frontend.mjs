@@ -67,12 +67,20 @@ function makeElement(id) {
     get: () => markup,
     set: (value) => {
       markup = String(value);
-      const count = (markup.match(/class="tick/g) || []).length;
-      el._ticks = Array.from({ length: count }, (_, index) => ({
-        getBoundingClientRect: () => ({
-          left: index * 2, right: index * 2 + 2, top: 0, bottom: 10, width: 2, height: 10,
-        }),
-      }));
+      // The app reads each tick's timestamp from its data attributes, so the
+      // fake ticks carry what the markup says rather than an index.
+      const tags = markup.match(/<span class="tick[^>]*>/g) || [];
+      el._ticks = tags.map((tag, index) => {
+        const ts = /data-ts="([^"]*)"/.exec(tag);
+        const end = /data-end="([^"]*)"/.exec(tag);
+        return {
+          dataset: { ts: ts ? ts[1] : "", end: end ? end[1] : "" },
+          classList: { contains: (name) => tag.includes(` ${name}"`) },
+          getBoundingClientRect: () => ({
+            left: index * 2, right: index * 2 + 2, top: 0, bottom: 10, width: 2, height: 10,
+          }),
+        };
+      });
     },
   });
   return el;
