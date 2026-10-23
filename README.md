@@ -1011,6 +1011,14 @@ Things worth knowing:
   token panel is readable only from localhost. If you would rather nobody on the
   LAN could read it, do not pass `--bind 0.0.0.0` and run the agent from this
   machine only.
+* **Docker: the local dashboard looks remote.** A published port makes every client
+  arrive from the bridge gateway (`172.17.0.1`), so the "localhost is trusted" rule never
+  matches and Speed test, Probe now, Pause, Apply and Reset answer `401`. Start the container
+  with `-e DROPTRACE_TRUST_LOCAL_HOST=1` and requests addressed to `127.0.0.1`/`localhost` are
+  trusted; a phone using `http://<your-ip>:8777` still needs the token. A browser cannot forge
+  the `Host` header, but a script on the LAN can, so this is opt-in, and the token panel stays
+  restricted to a real loopback peer. Publishing with `-p 127.0.0.1:8777:8777` closes that gap
+  entirely, at the price of no LAN access.
 * **`/api/reset` now needs `?confirm=yes`.** It deletes the evidence the tool
   exists to collect, and a bare `curl -X POST` should not be able to do that.
 

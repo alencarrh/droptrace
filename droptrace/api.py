@@ -74,6 +74,21 @@ def _is_loopback(request: Request) -> bool:
     return host in {"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"}
 
 
+_LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1"}
+
+
+def _addressed_to_localhost(request: Request) -> bool:
+    """True when the request was sent to ``localhost`` rather than a LAN address."""
+    host = (request.headers.get("host") or "").strip().lower()
+    if host.startswith("["):                    # [::1]:8777
+        name = host[1:].split("]", 1)[0]
+    elif host.count(":") == 1:                  # 127.0.0.1:8777
+        name = host.split(":", 1)[0]
+    else:                                       # bare name, or an unbracketed ::1
+        name = host
+    return name in _LOCAL_HOSTS
+
+
 async def _agent_token(store: Store, settings: Settings) -> str:
     """The shared secret for agents, generated once and kept in the database."""
     if settings.agent_token:
@@ -93,6 +108,10 @@ async def _guard(request: Request, store: Store, settings: Settings) -> None:
     like evidence. Reads stay open, which is a privacy choice, not a security one.
     """
     if _is_loopback(request):
+        return
+    # In Docker the operator's browser does not arrive from loopback, so an
+    # opted-in server also trusts a request addressed to localhost.
+    if settings.trust_local_host and _addressed_to_localhost(request):
         return
     supplied = (
         request.headers.get("x-agent-token")

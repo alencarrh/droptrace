@@ -106,6 +106,13 @@ class Settings:
     # means "generate one on first use and keep it in the database"; it is only
     # used as-is when it is set explicitly.
     agent_token: str = ""
+    # Treat a request addressed to localhost (``Host: 127.0.0.1:8777``) as the
+    # operator's own dashboard even when the peer address is not loopback. Needed
+    # in Docker, where a published port makes every client -- this machine's
+    # browser and a phone alike -- arrive from the bridge gateway (172.17.0.1).
+    # A browser cannot forge the Host header, but a script on the LAN can, so
+    # this is opt-in and only covers the control endpoints, never the token panel.
+    trust_local_host: bool = False
     # Resolve this name against the local resolver to check DNS health.
     dns_probe_name: str = "one.one.one.one"
     # Resolvers to compare with the machine's own, side by side: host[:port],
@@ -291,6 +298,7 @@ class Settings:
             probe_resolver=_env_bool("PROBE_RESOLVER", default["probe_resolver"]),
             probe_gateway=_env_bool("PROBE_GATEWAY", default["probe_gateway"]),
             lan_gateway=_env_str("LAN_GATEWAY", default["lan_gateway"]),
+            trust_local_host=_env_bool("TRUST_LOCAL_HOST", default["trust_local_host"]),
             dns_probe_name=_env_str("DNS_PROBE_NAME", default["dns_probe_name"]),
             dns_servers=_env_str("DNS_SERVERS", default["dns_servers"]),
             dns_cache_bust_interval=_env_float(

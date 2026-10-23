@@ -1721,9 +1721,17 @@
         options.headers = Object.assign({ "X-Agent-Token": CONTROL_TOKEN }, options.headers || {});
       }
       const response = await fetch(url, options);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401
+            ? "HTTP 401 - this dashboard is not allowed to control DropTrace " +
+              "(open it with ?token=..., or start the server with DROPTRACE_TRUST_LOCAL_HOST=1)"
+            : `HTTP ${response.status}`
+        );
+      }
       return await response.json().catch(() => ({}));
     } catch (error) {
+      status.lastCommandError = error.message;
       $("foot-conn").textContent = `command failed: ${error.message}`;
       return null;
     } finally {
@@ -1746,9 +1754,16 @@
       post(running ? "/api/control/stop" : "/api/control/start");
     });
     $("btn-ping").addEventListener("click", () => post("/api/probe?kind=latency"));
-    $("btn-speed").addEventListener("click", () => {
+    $("btn-speed").addEventListener("click", async () => {
       openSpeedModal("manual");
-      post("/api/probe?kind=speed");
+      const result = await post("/api/probe?kind=speed");
+      if (!result) {
+        // The server never started a test. Say so, and keep the modal up: the
+        // footer message is rewritten by the next refresh and would be missed.
+        $("speed-modal-title").textContent = "Speed test did not start";
+        $("speed-modal-sub").textContent = status.lastCommandError || "the request failed";
+        $("speed-modal-note").textContent = "Nothing was measured. Hide this and try again.";
+      }
     });
     $("speed-modal-hide").addEventListener("click", () => {
       clearTimeout(speedAutoClose);

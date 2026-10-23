@@ -99,6 +99,43 @@ def lan_client(tmp_path):
         yield test_client
 
 
+def make_docker_client(tmp_path, *, trust: bool, host: str):
+    """The app as Docker shows it: every peer is the bridge gateway, never loopback."""
+    db_path = tmp_path / "docker.db"
+    seed(db_path)
+    settings = Settings(
+        db_path=db_path, auto_start=False, enable_latency=False,
+        enable_download=False, enable_upload=False, probe_gateway=False,
+        trust_local_host=trust,
+    )
+    store = Store(db_path)
+    app = create_app(settings, store, Sampler(settings, store))
+    return TestClient(app, client=("172.17.0.1", 51234), base_url=f"http://{host}")
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1:8777", "localhost:8777", "[::1]:8777", "localhost"])
+def test_a_dashboard_addressed_to_localhost_can_control_when_trusted(tmp_path, host):
+    with make_docker_client(tmp_path, trust=True, host=host) as c:
+        assert c.post("/api/probe?kind=latency").status_code == 200
+
+
+@pytest.mark.parametrize("host", ["192.168.3.70:8777", "evil.example:8777", "127.0.0.1.evil.example"])
+def test_a_lan_address_still_needs_the_token_when_trusted(tmp_path, host):
+    with make_docker_client(tmp_path, trust=True, host=host) as c:
+        assert c.post("/api/probe?kind=latency").status_code == 401
+        assert c.post("/api/reset?confirm=yes").status_code == 401
+
+
+def test_localhost_is_not_trusted_unless_opted_in(tmp_path):
+    with make_docker_client(tmp_path, trust=False, host="127.0.0.1:8777") as c:
+        assert c.post("/api/probe?kind=latency").status_code == 401
+
+
+def test_trusting_localhost_never_exposes_the_token_panel(tmp_path):
+    with make_docker_client(tmp_path, trust=True, host="127.0.0.1:8777") as c:
+        assert c.get("/api/agent/info").status_code == 403
+
+
 def test_health(client):
     body = client.get("/api/health").json()
     assert body["ok"] is True
