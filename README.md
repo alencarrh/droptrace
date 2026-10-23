@@ -323,7 +323,7 @@ real drop reads the same way with real names: `isp` when your router answered,
 
 Useful flags: `--open` (open the browser at startup), `--latency-interval`,
 `--quick-interval`, `--sustained-interval`, `--download-seconds`, `--upload-seconds`,
-`--download-chunk-bytes`, `--upload-chunk-bytes`, `--max-test-bytes`, `--duration` (`0` = forever, accepts `8h`),
+`--download-chunk-bytes`, `--upload-chunk-bytes`, `--max-test-bytes`, `--streams N` (parallel connections per direction, default 8), `--duration` (`0` = forever, accepts `8h`),
 `--public-targets`, `--extra-targets name=host:port`, `--no-upload`,
 `--no-gateway`, `--lan-gateway IP`, `--no-resolver`, `--dns-probe-name`, `--dns-servers LIST` (resolvers to compare with your own, empty = none), `--dns-cache-bust-interval SEC` (uncached random-name lookups, default 60, 0 = off), `--target-timeout`,
 `--ping-count`, `--fact-check-targets LIST` (corroboration hosts, empty = off), `--fact-check-interval SEC`, `--incident-min-rounds`, `--fast-interval`, `--fast-timeout`, `--fast-hold-seconds`, `--fast-max-seconds`, `--burst-handshakes N` (0 = off), `--burst-window SEC`, `--burst-host HOST`, `--burst-cooldown SEC`, `--trace-host HOST` (empty = no tracing), `--trace-interval SEC` (healthy baseline, default 3600, 0 = only at a drop), `--trace-timeout SEC` (hard cap, default 20), `--trace-max-hops N`, `--trace-blackout-interval SEC` (trace after a heavy-loss burst, default 900, 0 = off), `--db`, `--raw-window-hours` (keep individual probes this long, default 168, 0 = never fold), `--retention-days`.
@@ -896,6 +896,16 @@ Tune it from the Cadence panel or with `--download-seconds` / `--upload-seconds`
 (`0` disables that direction), `--max-test-bytes` to cap a direction, and
 `--download-chunk-bytes` / `--upload-chunk-bytes` for request sizing. A custom
 `--upload-url` must accept a chunked request body.
+
+**Parallel connections (`--streams`, default 8).** A single TCP connection to a CDN
+edge cannot fill a fast line: on a 500/250 Mbps plan one connection measured about
+205 Mbps down and 100 up, four reached ~450 down, and eight ~470 down and ~190-220
+up — roughly what a browser speed test shows. So each direction runs 8 connections
+by default. Change it with `--streams N`, `DROPTRACE_STREAMS=N`, or **Parallel
+streams** under *Targets & advanced* in the dashboard (1-16, applied live). `1` gives
+a strict single-connection figure, which reads low on fast links. More connections
+move more data in the same ten seconds, so the monthly projection above rises with
+the speed you actually reach, and `--max-test-bytes` still bounds a direction.
 
 ### The dashboard's own traffic
 

@@ -175,7 +175,7 @@ def add_common(parser: argparse.ArgumentParser) -> None:
                       help="block size streamed into an upload (default 1 MiB)")
     xfer.add_argument("--max-test-bytes", type=int, metavar="N",
                       help="stop a direction after N bytes; 0 = no cap (default 0)")
-    xfer.add_argument("--streams", type=int, metavar="N", help="parallel connections per direction")
+    xfer.add_argument("--streams", type=int, metavar="N", help="parallel connections per direction (default 8; 1-16)")
     xfer.add_argument("--request-timeout", type=float, metavar="SEC", help="HTTP timeout (default 60)")
     xfer.add_argument("--no-download", action="store_true", help="disable download tests")
     xfer.add_argument("--no-upload", action="store_true", help="disable upload tests")

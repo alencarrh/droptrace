@@ -1287,7 +1287,7 @@
     set("in-dnsname", settings.dns_probe_name ?? "");
     check("in-gateway", settings.probe_gateway);
     check("in-resolver", settings.probe_resolver);
-    set("in-streams", settings.streams ?? 1);
+    set("in-streams", settings.streams ?? 8);
     set("in-timeout", settings.target_timeout ?? 1);
     set("in-minrounds", settings.incident_min_rounds ?? 1);
     set("in-rawwindow", Math.round(((settings.raw_window_hours ?? 168) / 24) * 10) / 10);
@@ -1379,7 +1379,7 @@
       dns_probe_name: $("in-dnsname").value.trim(),
       probe_gateway: $("in-gateway").checked,
       probe_resolver: $("in-resolver").checked,
-      streams: Math.round(numberOr("in-streams", 1)),
+      streams: Math.round(numberOr("in-streams", 8)),
       target_timeout: numberOr("in-timeout", 1),
       incident_min_rounds: Math.round(numberOr("in-minrounds", 1)),
       raw_window_hours: Math.max(0, numberOr("in-rawwindow", 7)) * 24,

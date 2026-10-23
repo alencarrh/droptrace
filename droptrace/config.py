@@ -252,8 +252,13 @@ class Settings:
     # Optional safety valve per direction; 0 disables it. At 10s a gigabit link
     # would move ~1.2 GB per test, so set this if you are on a data cap.
     max_test_bytes: int = 0
-    # Parallel connections per direction (1 = single stream).
-    streams: int = 1
+    # Parallel connections per direction. One TCP connection to a distant CDN
+    # edge tops out around 200 Mbps however fast the line is (a 500 Mbps plan
+    # measured ~205 with 1, ~450 with 4-8), so 8 is what a speed test needs to
+    # fill the link, as browser speed tests do. Set 1 for a strict single-stream
+    # figure, or lower it to cut the data a test moves. Range 1-16; override with
+    # --streams, DROPTRACE_STREAMS, or "Parallel streams" in the dashboard.
+    streams: int = 8
     request_timeout: float = 60.0
     enable_latency: bool = True
     enable_download: bool = True

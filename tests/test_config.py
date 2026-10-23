@@ -152,3 +152,17 @@ def test_adaptive_probing_flags():
     assert Settings().fast_interval == 1.0
     assert Settings().fast_hold_seconds == 10.0
     assert Settings().fast_max_seconds == 300.0
+
+
+def test_speed_tests_use_eight_parallel_connections_by_default(monkeypatch):
+    """One connection reads ~200 Mbps on a 500 Mbps line; the default must fill it."""
+    monkeypatch.delenv("DROPTRACE_STREAMS", raising=False)
+    assert Settings.from_env().streams == 8
+    assert Settings().streams == 8
+
+
+def test_parallel_connections_can_be_overridden_from_the_environment(monkeypatch):
+    monkeypatch.setenv("DROPTRACE_STREAMS", "3")
+    assert Settings.from_env().streams == 3
+    monkeypatch.setenv("DROPTRACE_STREAMS", "0")
+    assert Settings.from_env().streams == 1          # never below one connection
