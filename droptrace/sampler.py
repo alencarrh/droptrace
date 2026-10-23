@@ -228,6 +228,10 @@ class Sampler:
         self.disabled_targets: dict[str, str] = {}
         self._target_success: dict[str, int] = {}
         self._target_fail: dict[str, int] = {}
+        # Consecutive failures that count towards probation: only rounds in
+        # which something else answered, so a whole-connection outage cannot
+        # get a guessed target stood down.
+        self._probation_fail: dict[str, int] = {}
         self._speed_backoff = 1
         self._speed_forced: str | None = None
         self._manual_tiers: set[str] = set()
@@ -301,6 +305,7 @@ class Sampler:
         for target in self.targets:
             self._target_success.setdefault(target.name, 0)
             self._target_fail.setdefault(target.name, 0)
+            self._probation_fail.setdefault(target.name, 0)
         return self.targets
 
     async def start(self) -> None:
@@ -887,7 +892,24 @@ class Sampler:
             )
 
         dns_ok = verdict.get("dns_ok")
-        if dns_ok is not None:
+        if dns_ok is None and self.trackers["dns"].id is not None and not any(
+            t.role == "dns" and t.name not in self.disabled_targets for t in self.targets
+        ):
+            # The last DNS target was stood down while its incident was open.
+            # Nothing will ever probe it again to report recovery, so end the
+            # incident here instead of leaving it "so far" forever.
+            events += await self.trackers["dns"].observe(
+                ts=ts,
+                down=False,
+                scope="dns",
+                failed_targets=[],
+                total=1,
+                detail=detail,
+                min_rounds=self.settings.incident_min_rounds,
+                last_ok_ts=self._last_ok_ts.get("dns"),
+                last_fail_ts=self._last_fail_ts.get("dns"),
+            )
+        elif dns_ok is not None:
             events += await self.trackers["dns"].observe(
                 ts=ts,
                 down=not dns_ok,
@@ -911,13 +933,23 @@ class Sampler:
         )
 
     def _update_target_health(self, samples: Sequence[dict]) -> None:
+        # A guess that stays silent while the rest of the connection answers is
+        # filtered. One that stays silent while *nothing* answers is just
+        # caught in an outage, and says nothing about whether it ever works.
+        guessed = {t.name for t in self.targets if t.guessed}
+        connection_up = any(
+            s.get("ok") for s in samples if (s.get("target") or "?") not in guessed
+        )
         for sample in samples:
             name = sample.get("target") or "?"
             if sample.get("ok"):
                 self._target_success[name] = self._target_success.get(name, 0) + 1
                 self._target_fail[name] = 0
+                self._probation_fail[name] = 0
             else:
                 self._target_fail[name] = self._target_fail.get(name, 0) + 1
+                if connection_up:
+                    self._probation_fail[name] = self._probation_fail.get(name, 0) + 1
 
         # A guessed target (auto-detected gateway, resolver) that never answers
         # is almost certainly filtered rather than down; standing it down keeps
@@ -928,7 +960,7 @@ class Sampler:
                 continue
             if (
                 self._target_success.get(target.name, 0) == 0
-                and self._target_fail.get(target.name, 0) >= probation
+                and self._probation_fail.get(target.name, 0) >= probation
             ):
                 reason = (
                     f"no response in {probation} rounds - {target.describe()} may filter TCP; "
@@ -1147,6 +1179,7 @@ class Sampler:
                 self.disabled_targets.clear()
                 self._target_success.clear()
                 self._target_fail.clear()
+                self._probation_fail.clear()
             self.refresh_targets()
             if "latency_interval" in applied and self._next_latency is not None:
                 # A shorter interval takes effect immediately instead of after

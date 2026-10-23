@@ -9,6 +9,7 @@ import pytest
 
 import droptrace.sampler as sampler_module
 from droptrace.config import Settings
+from droptrace.probes import evaluate_round
 from droptrace.sampler import Sampler
 from droptrace.storage import Store
 from droptrace.targets import Target
@@ -355,6 +356,77 @@ async def test_guessed_target_is_stood_down_when_it_never_answers(tmp_path, stor
     # A stood-down guess is not a connectivity fault, so its failures must not
     # keep inflating the error count.
     assert sampler.counts["errors"] == 0
+
+
+GUESSED_DNS_TARGETS = [
+    Target("gateway", "lan", "router", host="127.0.0.1", ports=(9,), guessed=True),
+    Target("cloudflare", "internet", "cloudflare", host="127.0.0.1", ports=(9,)),
+    Target("dns", "dns", "dns", kind="dns", host="127.0.0.1", ports=(9,),
+           probe_name="x.com", guessed=True),
+]
+
+
+def round_samples(*, internet: bool, guessed: bool) -> list[dict]:
+    """One round: the internet target follows ``internet``, guesses follow ``guessed``."""
+    ts = time.time()
+    out = []
+    for target in GUESSED_DNS_TARGETS:
+        ok = guessed if target.guessed else internet
+        out.append({
+            "ts": ts, "kind": "latency", "target": target.name, "role": target.role,
+            "round_id": int(ts * 1000), "ok": ok, "probe_ms": 5.0 if ok else None,
+            "error": None if ok else "timeout",
+        })
+    return out
+
+
+async def run_round(sampler: Sampler, samples: list[dict]) -> None:
+    """The slice of ``_probe_round`` that judges health and tracks incidents."""
+    sampler._update_target_health(samples)
+    active = [s for s in samples if s.get("target") not in sampler.disabled_targets]
+    await sampler._track_incidents(evaluate_round(active), samples)
+
+
+async def test_whole_connection_outage_does_not_stand_down_guessed_targets(
+    tmp_path, store, monkeypatch
+):
+    """Rounds that fail because *everything* is down say nothing about a guess.
+
+    Regression: the monitor started during a ~1 minute outage, the router and
+    DNS guesses missed their first three rounds, were declared "filtered" and
+    were never probed again.
+    """
+    monkeypatch.setattr(sampler_module, "build_targets", lambda settings: list(GUESSED_DNS_TARGETS))
+    sampler = make_sampler(tmp_path, store, target_probation_rounds=3)
+    sampler.refresh_targets()
+
+    for _ in range(10):
+        await run_round(sampler, round_samples(internet=False, guessed=False))
+    assert sampler.disabled_targets == {}
+
+    # Once the connection is back, a guess that still stays silent is filtered.
+    for _ in range(3):
+        await run_round(sampler, round_samples(internet=True, guessed=False))
+    assert set(sampler.disabled_targets) == {"gateway", "dns"}
+
+
+async def test_dns_incident_closes_when_its_target_is_stood_down(tmp_path, store, monkeypatch):
+    """A disabled target can never report recovery, so it must not pin an incident open."""
+    monkeypatch.setattr(sampler_module, "build_targets", lambda settings: list(GUESSED_DNS_TARGETS))
+    sampler = make_sampler(tmp_path, store, target_probation_rounds=2)
+    sampler.refresh_targets()
+
+    # The internet is fine but the guessed resolver never answers DNS.
+    await run_round(sampler, round_samples(internet=True, guessed=False))
+    assert sampler.trackers["dns"].id is not None
+
+    await run_round(sampler, round_samples(internet=True, guessed=False))
+    assert "dns" in sampler.disabled_targets
+    await run_round(sampler, round_samples(internet=True, guessed=False))
+
+    assert sampler.trackers["dns"].id is None
+    rows = [r for r in await store.incidents(0.0) if r["kind"] == "dns"]
+    assert rows and not any(r["ongoing"] for r in rows)
 
 
 async def test_probe_exception_is_captured_not_raised(tmp_path, store, monkeypatch):
